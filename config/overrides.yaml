@@ -1,0 +1,43 @@
+# Manual data overrides — ported from R analysis.qmd, plus NEW PO-box handling.
+#
+# REVIEWED, VERSIONED exceptions to the raw Neon data. Every entry carries a `note`.
+#
+# PII NOTE: this file lives in a PUBLIC repo, so real donor names were removed. Entries are keyed
+# by the stable Neon identifiers (household_id / account_id). The human-readable reasoning behind
+# each override lives in the legacy R project's analysis.qmd (kept locally; gitignored here).
+#
+# These ids are transcribed from the R project's CSV/RDS data and will be re-verified against live
+# Neon API data in Phase 2 (the specific account to promote/demote within a household is resolved by
+# membership at that time).
+
+# --- Primary-contact overrides ---------------------------------------------
+# Household 54: the deceased partner is incorrectly flagged as the primary household contact;
+# promote the surviving partner instead. (R analysis.qmd ~lines 71-109)
+primary_contact_overrides:
+  - household_id: "54"
+    note: >
+      Deceased partner is listed as the primary contact; promote the surviving partner instead.
+      The exact account to promote/demote is resolved by household membership in Phase 2.
+
+# --- Household rollup force keep / drop ------------------------------------
+# Keep/drop these specific household ids regardless of other filters (transcribed from R).
+force_keep_household_ids:
+  - id: "403"
+  - id: "530"
+  - id: "1620"
+force_drop_household_ids:
+  - id: "224"
+
+# --- Junk / non-donor accounts to exclude ----------------------------------
+exclude_account_ids:
+  "36805": "Internal miscellaneous cash/credit-card account — not a real donor"
+
+# --- PO-box home-ZIP overrides (NEW — absent from R) -----------------------
+# Some donors give a P.O. box, which cannot be geocoded to a home location. Where the real town is
+# known, map the donor (by account_id) to a home ZIP for distance purposes. Everyone else with a PO
+# box / unmappable address is FLAGGED ("po_box" / "unmappable"), never silently dropped.
+po_box_overrides: []
+  # example:
+  # - account_id: "12345"
+  #   home_zip: "12816"
+  #   note: "PO box on file; lives in Cambridge"

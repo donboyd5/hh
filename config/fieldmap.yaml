@@ -1,0 +1,62 @@
+# Maps Neon field/column names -> standardized snake_case names used throughout the project.
+# Ported from R_hhfrc/get_convert_and_save_data.qmd: vmap() + variable_lookup.
+#
+# IMPORTANT (API-first): "Neon names" are now the API *output field* names (selected via
+# `outputFields` in POST */search). These will be confirmed and extended in Phase 1 once we
+# inspect GET /accounts/search/outputFields (and the donations/events equivalents). The CSV-report
+# column names used by the R project differ slightly and are kept only for the Phase 2 validation
+# cross-check against the R RDS/CSV files.
+
+# Transformation rules applied to any Neon name NOT in `mapping` below (the R vmap() function):
+vmap_rules:
+  lowercase: true
+  remove_chars: ["?", ".", "-"]
+  remove_suffixes: ["(c)", "(f)"]
+  collapse:            # applied before underscore substitution
+    "phone ": "phone"  # "Phone 2" -> "phone2"
+    "line ": "line"    # "Line 1"  -> "line1"
+  slash_to_underscore: true      # "and/or" -> "and_or"
+  whitespace_to_underscore: true # any run of whitespace -> single "_"
+  trim_underscores: true
+
+# Explicit overrides — Neon name -> standard name. Takes precedence over vmap_rules.
+# Seeded from the R variable_lookup; API field names to be added/confirmed in Phase 1.
+mapping:
+  # accounts / contacts
+  "Account ID": account_id
+  "Full Name": full_name
+  "HH Name": household_name
+  "HH Acct Name": household_name_account_name
+  "Household ID": household_id
+  "Do Not Contact": do_not_contact
+  "Deceased": deceased
+  "Account Type": account_type
+  "Contact Type": contact_type
+  "Full Address": full_address
+  "Full Street Address": full_street_address
+  "City": city
+  "State/Province": state_province
+  "Zip/Postal Code": zip_postal_code
+  # donations
+  "Donation Amount": donation_amount
+  "Donation Date": donation_date
+  "Donation Type": donation_type
+  "Donation Status": donation_status
+  "Payment Status": payment_status
+  "All Donations Amount": donation_all_amount
+  # events / registrations
+  "Event ID": event_id
+  "Event": event_name
+  "Starts On": starts_on
+  "Ends On": ends_on
+  "Category": category
+  "Topic": topic
+  "Attendees": attendees
+  "Code": code
+  "Status": status
+  "Amount": amount
+  "Registered On": registered_on
+  "Created Date": created_date
+  "Last Modified Date": last_modified_date
+  "Type": type
+  "Campaign": campaign

@@ -1,0 +1,42 @@
+[project]
+name = "hh"
+version = "0.1.0"
+description = "Hubbard Hall data analysis (Neon CRM) — provenance-driven Python pipeline + Quarto books"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "httpx>=0.27",         # Neon CRM API client (sync, Basic auth)
+    "pandas>=2.2",         # tabular data
+    "pyarrow>=17",         # Parquet I/O for the layered data model
+    "pyyaml>=6.0",         # config / manifest / overrides
+    "python-dotenv>=1.0",  # load NEON_ORG_ID / NEON_API_KEY from .env
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "ruff>=0.6",
+    "ipykernel>=6",        # so Quarto can execute notebooks in this venv
+    "pyreadr>=0.5.6",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/hh"]
+
+[tool.uv]
+package = true
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]

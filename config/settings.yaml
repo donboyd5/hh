@@ -1,0 +1,54 @@
+# Hubbard Hall project settings — edit as needed. Loaded by hh.config.load_settings().
+
+# --- Neon CRM API ----------------------------------------------------------
+neon:
+  base_url: "https://api.neoncrm.com/v2/"
+  # Credentials live in .env (NEON_ORG_ID, NEON_API_KEY) — never here.
+  search_page_size: 200             # results per page for POST */search endpoints
+  search_min_interval_seconds: 1.1  # search endpoints throttled to 1 req/sec; stay just under
+  get_min_interval_seconds: 0.2     # most GET endpoints allow 5/sec -> ~0.2s floor
+  max_retries_on_429: 8             # backoff retries on rate-limit responses
+  request_timeout_seconds: 30
+
+# --- Data-layer paths (relative to project root) ---------------------------
+paths:
+  raw: data/00_raw
+  raw_neon: data/00_raw/neon
+  interim: data/10_interim
+  processed: data/20_processed
+  external: data/30_external
+  cache: data/90_cache
+  geocode_cache: data/90_cache/geocode.parquet
+  manifest: data/manifest
+  run_log: data/manifest/run_log.jsonl
+
+# --- Hubbard Hall fiscal year ----------------------------------------------
+# hhfy(date): if month >= start_month -> year+1, else year  (port of R analysis.qmd)
+fiscal_year:
+  start_month: 7   # July
+  start_day: 1
+
+# --- Hubbard Hall venue (origin for distance bands) ------------------------
+venue:
+  name: "Hubbard Hall"
+  address: "25 East Main Street"
+  city: "Cambridge"
+  state: "NY"
+  zip: "12816"
+  # lat/lon are null until the venue address is geocoded (same provenance path as donor
+  # addresses) or confirmed manually. Distance bands cannot be computed until set.
+  lat: null
+  lon: null
+
+# --- Geocoding -------------------------------------------------------------
+geocode:
+  provider: census   # US Census geocoder (no API key). Alternatives: nominatim, google
+  census:
+    benchmark: "Public_AR_Current"
+    vintage: "Current_Current"
+  cache: true        # never re-query the same normalized address
+
+# --- Distance bands (miles) ------------------------------------------------
+distance:
+  bands_miles: [1, 10, 20]   # produces bands: <=1, <=10, <=20, >20
+  method: haversine          # straight-line; 'driving' is a possible future option

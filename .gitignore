@@ -1,0 +1,44 @@
+# =============================================================================
+# Python
+# =============================================================================
+*.pyc
+*.pyo
+__pycache__/
+*.egg-info/
+.ipynb_checkpoints/
+
+# =============================================================================
+# Virtual environments & local secrets
+# =============================================================================
+.venv/
+# .env holds NEON_ORG_ID / NEON_API_KEY — a secret. NEVER commit it.
+.env
+
+# =============================================================================
+# DATA — Hubbard Hall constituent data (DONOR PII). NEVER COMMIT.
+# Everything under data/ (raw Neon pulls, cleaned, processed, geocoded) contains
+# names, home addresses, and donation amounts. It is regenerated from code + the
+# Neon API, not stored in version control.
+# =============================================================================
+data/
+
+# =============================================================================
+# Legacy R project (R_hhfrc/) is its OWN git repository and ALSO contains PII
+# (data-raw/ CSVs, Judy's Excel). Keep it on disk as a read-only reference and
+# validation oracle, but do NOT track it here.
+# =============================================================================
+R_hhfrc/
+
+# =============================================================================
+# Quarto / build output
+# =============================================================================
+_web/
+.quarto/
+
+# =============================================================================
+# OS / editor cruft
+# =============================================================================
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
