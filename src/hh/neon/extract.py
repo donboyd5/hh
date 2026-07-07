@@ -5,6 +5,10 @@ reference JSON files, plus a ``manifest.yaml`` recording exactly how each was ob
 (endpoint, output fields, Neon-reported totals, local row counts, file SHA-256, code
 commit). Appends a line to the run log.
 
+All retrieved records stream straight to disk as they arrive (never held only in memory), and each
+pull is an immutable date-stamped folder — so previously retrieved data always survives, even if
+API access is later lost. Downstream code loads saved data via ``hh.io.load_raw``, never the API.
+
 Registrations are gathered by sweeping every event id from the events extract (there is no bulk
 registrations search endpoint). Events are therefore always extracted before registrations.
 """
@@ -34,13 +38,16 @@ def _extract_search(
     path = pull_dir / f"{entity}.jsonl"
     total: int | None = None
     count = 0
+    pages = 0
     with path.open("w") as f:
-        for records, pagination in client.search_pages(entity):
+        for records, pagination in client.search_pages(entity, validate_fields=True):
             if total is None:
                 total = pagination.get("totalResults")
             for record in records:
                 f.write(json.dumps(record, default=str) + "\n")
                 count += 1
+            pages += 1
+    print(f"[neon] {entity}: {count:,} records ({pages} page(s)); neon total={total}", flush=True)
     return count, total, path
 
 
@@ -62,12 +69,28 @@ def _extract_registrations(
     out = pull_dir / "registrations.jsonl"
     event_ids = _event_ids(events_path) if events_path else []
     count = 0
+    failed: list[tuple[str, str]] = []
     with out.open("w") as f:
-        for event_id in event_ids:
-            for record in client.get_event_registrations(event_id):
+        for i, event_id in enumerate(event_ids, 1):
+            try:
+                records = list(client.get_event_registrations(event_id))
+            except Exception as exc:  # noqa: BLE001 - one event must not abort the whole sweep
+                failed.append((event_id, type(exc).__name__))
+                continue
+            for record in records:
                 record["_swept_event_id"] = event_id  # provenance: which event this came from
                 f.write(json.dumps(record, default=str) + "\n")
                 count += 1
+            if i % 500 == 0 or i == len(event_ids):
+                print(
+                    f"[neon] registrations: {i}/{len(event_ids)} events, {count:,} records",
+                    flush=True,
+                )
+    if failed:
+        print(
+            f"[neon] registrations: {len(failed)} event(s) failed; saved {count} records. "
+            f"first failures: {failed[:3]}"
+        )
     return count, len(event_ids), out
 
 

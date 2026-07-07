@@ -3,18 +3,25 @@ from __future__ import annotations
 
 import math
 
+import pandas as pd
+
 
 def present(v) -> str | None:
-    """Return a cleaned string, or None if the value is missing / NaN / blank.
+    """Return a cleaned string, or None if the value is missing / NaN / NA / blank.
 
-    Surrounding whitespace is stripped: Neon report exports carry incidental trailing spaces (e.g.
-    ``"Visual Arts "``), and R's reference output has clean values, so stripping makes exact-match
-    rules agree with R. NaN (a float) and None are treated as missing, like R's ``is.na()``.
+    Handles pandas NA/NaT/NaN and None the way R's ``is.na()`` does. Surrounding whitespace is
+    stripped: Neon exports carry incidental trailing spaces (e.g. ``"Visual Arts "``), and R's
+    reference output has clean values, so stripping makes exact-match rules agree with R.
     """
     if v is None:
         return None
     if isinstance(v, float) and math.isnan(v):
         return None
+    try:
+        if pd.isna(v):
+            return None
+    except (TypeError, ValueError):
+        pass
     s = str(v).strip()
     return s if s else None
 

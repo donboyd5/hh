@@ -1,13 +1,12 @@
-"""Neon CRM API v2 endpoint paths and per-entity output-field selection.
+"""Neon CRM API v2 endpoint paths, per-entity output fields, and match-all search criteria.
 
-The bulk-extraction endpoints are the ``POST */search`` methods (throttled to 1 req/sec). Event
-registrations have NO bulk search endpoint, so they are gathered via a per-event sweep of
-``GET /events/{id}/eventRegistrations``.
+Bulk extraction uses the ``POST */search`` endpoints (1 req/sec). Each requires at least one
+``searchFields`` criterion, so a "list everything" pull uses a NOT_BLANK match-all on a
+universally-populated field (``Event`` for events, ``Account ID``/``Donation ID`` for the others).
 
-NOTE: the ``OUTPUT_FIELDS`` below are a best-effort starter set of human-readable field names. The
-exact valid names for your Neon instance should be confirmed on the first real pull via
-``NeonClient.list_output_fields(entity)`` (which calls ``GET /<entity>/search/outputFields``) and
-then committed here. The R project's CSV-report column names are a close guide.
+Field names mirror Neon's report columns (including ``(F)`` formatted-field suffixes). The client
+validates any requested output fields against ``GET /<entity>/search/outputFields`` and drops
+invalid ones (with a warning) rather than failing the request.
 """
 from __future__ import annotations
 
@@ -25,28 +24,43 @@ OUTPUT_FIELDS_PATHS: dict[str, str] = {
     "events": "/events/search/outputFields",
 }
 
-# Starter output-field sets (confirm via list_output_fields on first pull).
+# A NOT_BLANK criterion on a universally-populated field matches every record.
+MATCH_ALL_FIELDS: dict[str, str] = {
+    "accounts": "Account ID",
+    "donations": "Donation ID",
+    "events": "Event",
+}
+
+
+def match_all_search_fields(entity: str) -> list[dict]:
+    """A searchFields list that matches every record for the entity."""
+    field = MATCH_ALL_FIELDS[entity]
+    return [{"field": field, "operator": "NOT_BLANK", "value": ""}]
+
+
+# Requested output fields per entity (validated against the API at runtime; invalid ones dropped).
 OUTPUT_FIELDS: dict[str, list[str]] = {
     "accounts": [
         "Account ID",
         "Account Type",
         "First Name",
         "Last Name",
-        "Full Name",
-        "Organization Name",
+        "Full Name (F)",
+        "Company Name",
         "Household ID",
         "Household Name",
         "Contact Type",
         "Deceased",
         "Do Not Contact",
+        "Full Street Address (F)",
         "Address Line 1",
         "Address Line 2",
         "City",
         "State/Province",
-        "Zip/Postal Code",
+        "Zip Code",
         "Country",
         "Email 1",
-        "Phone 1",
+        "Phone 1 Full Number (F)",
     ],
     "donations": [
         "Donation ID",
@@ -58,24 +72,28 @@ OUTPUT_FIELDS: dict[str, list[str]] = {
         "Donation Status",
         "Payment Status",
         "Fund",
-        "Campaign",
+        "Campaign Name",
         "Purpose",
         "Source",
-        "Tribute",
-        "Note",
+        "Full Name (F)",
+        "Company Name",
+        "City",
+        "Address Line 1",
+        "State/Province",
+        "Zip Code",
+        "Deceased",
+        "Do Not Contact",
     ],
     "events": [
         "Event ID",
         "Event Name",
-        "Start Date",
-        "End Date",
-        "Category",
-        "Topic",
-        "Code",
-        "Status",
-        "Capacity",
-        "Attendees",
-        "Registered",
+        "Event Category Name",
+        "Event Topic",
+        "Event Code",
+        "Event Start Date",
+        "Event End Date",
+        "Event Capacity",
+        "Event Registration Attendee Count",
     ],
 }
 

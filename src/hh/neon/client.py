@@ -41,6 +41,7 @@ class NeonClient:
         self.timeout = float(settings.get("request_timeout_seconds", 30))
         self._sleep = sleep
         self._last_request_at = 0.0
+        self._valid_fields_cache: dict[str, set[str] | None] = {}
         self._client = httpx.Client(
             base_url=self.base_url,
             auth=httpx.BasicAuth(org_id, api_key),
@@ -74,11 +75,19 @@ class NeonClient:
         interval: float,
         **kwargs: Any,
     ) -> httpx.Response:
-        """Issue one request with throttle + 429 backoff; raise on other errors."""
+        """Issue one request with throttle, 429 backoff, and retry on transient network errors."""
         response: httpx.Response | None = None
+        last_exc: Exception | None = None
         for attempt in range(self.max_retries + 1):
             self._throttle(interval)
-            response = self._client.request(method, path, **kwargs)
+            try:
+                response = self._client.request(method, path, **kwargs)
+                last_exc = None
+            except (httpx.TimeoutException, httpx.NetworkError) as exc:
+                # transient read/connect timeout or network hiccup -> backoff and retry
+                last_exc = exc
+                self._sleep(min(2.0**attempt, 30.0))
+                continue
             if response.status_code == 429:
                 retry_after = response.headers.get("Retry-After")
                 delay = float(retry_after) if retry_after is not None else min(2.0**attempt, 30.0)
@@ -86,6 +95,8 @@ class NeonClient:
                 continue
             response.raise_for_status()
             return response
+        if last_exc is not None:
+            raise last_exc
         assert response is not None
         response.raise_for_status()
         return response
@@ -98,18 +109,27 @@ class NeonClient:
         search_fields: list[dict] | None = None,
         output_fields: list[str] | None = None,
         page_size: int | None = None,
+        validate_fields: bool = False,
     ) -> Iterator[tuple[list[dict], dict]]:
-        """Yield ``(records, pagination)`` per page for a ``POST /<entity>/search`` endpoint."""
+        """Yield ``(records, pagination)`` per page for a ``POST /<entity>/search`` endpoint.
+
+        With no ``search_fields``, a NOT_BLANK match-all is used so every record is returned.
+        Set ``validate_fields=True`` to drop any requested output fields the API doesn't recognize.
+        """
         if entity not in endpoints.SEARCH_PATHS:
             raise ValueError(f"Unknown search entity {entity!r}")
         path = endpoints.SEARCH_PATHS[entity]
         page_size = page_size or self.page_size
         if output_fields is None:
             output_fields = endpoints.OUTPUT_FIELDS.get(entity, [])
+        if not search_fields:
+            search_fields = endpoints.match_all_search_fields(entity)
+        if validate_fields:
+            output_fields = self._valid_output_fields(entity, output_fields)
         page = 0
         while True:
             body = {
-                "searchFields": search_fields or [],
+                "searchFields": search_fields,
                 "outputFields": output_fields,
                 "pagination": {"currentPage": page, "pageSize": page_size},
             }
@@ -140,6 +160,10 @@ class NeonClient:
             "GET", path, interval=self.get_interval if interval is None else interval, params=params
         ).json()
 
+    def raw_get(self, path: str, *, params: dict | None = None) -> httpx.Response:
+        """Direct GET with no throttle/retry, for concurrent sweeps. The caller handles retries."""
+        return self._client.get(path, params=params, timeout=self.timeout)
+
     def get_event_registrations(self, event_id: str, *, page_size: int = 200) -> Iterator[dict]:
         """Page through ``GET /events/{id}/eventRegistrations``.
 
@@ -165,9 +189,40 @@ class NeonClient:
                 break
             page += 1
 
-    def list_output_fields(self, entity: str) -> list[dict]:
-        """Fetch the valid output fields for a search entity (for first-pull validation)."""
+    def list_output_fields(self, entity: str) -> list[str]:
+        """Valid output-field names for a search entity (standard + custom display names)."""
         if entity not in endpoints.OUTPUT_FIELDS_PATHS:
             raise ValueError(f"No outputFields endpoint for {entity!r}")
         data = self.get(endpoints.OUTPUT_FIELDS_PATHS[entity])
-        return data if isinstance(data, list) else data.get("outputFields", [])
+        if isinstance(data, dict):
+            standard = data.get("standardFields", [])
+            custom = data.get("customFields", [])
+        else:
+            standard, custom = data, []
+        names = [f for f in standard if isinstance(f, str)]
+        for item in custom:
+            if isinstance(item, dict):
+                name = item.get("displayName") or item.get("name")
+                if isinstance(name, str):
+                    names.append(name)
+            elif isinstance(item, str):
+                names.append(item)
+        return names
+
+    def _valid_output_fields(self, entity: str, requested: list[str]) -> list[str]:
+        """Drop requested output fields the API does not recognize (warns; cached per entity)."""
+        if not requested:
+            return requested
+        if entity not in self._valid_fields_cache:
+            try:
+                self._valid_fields_cache[entity] = set(self.list_output_fields(entity))
+            except Exception:
+                self._valid_fields_cache[entity] = None
+        valid = self._valid_fields_cache[entity]
+        if not valid:  # validation unavailable -> trust the request unchanged
+            return requested
+        kept = [f for f in requested if f in valid]
+        dropped = [f for f in requested if f not in valid]
+        if dropped:
+            print(f"[neon] {entity}: dropping unrecognized output fields: {dropped}")
+        return kept

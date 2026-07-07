@@ -4,11 +4,11 @@
 neon:
   base_url: "https://api.neoncrm.com/v2/"
   # Credentials live in .env (NEON_ORG_ID, NEON_API_KEY) — never here.
-  search_page_size: 200             # results per page for POST */search endpoints
+  search_page_size: 100             # results per page (smaller = faster pages, fewer timeouts)
   search_min_interval_seconds: 1.1  # search endpoints throttled to 1 req/sec; stay just under
   get_min_interval_seconds: 0.2     # most GET endpoints allow 5/sec -> ~0.2s floor
   max_retries_on_429: 8             # backoff retries on rate-limit responses
-  request_timeout_seconds: 30
+  request_timeout_seconds: 60
 
 # --- Data-layer paths (relative to project root) ---------------------------
 paths:

@@ -69,3 +69,8 @@ R_hhfrc/       legacy R project (separate git repo, PII) — read-only reference
 Every Neon pull is recorded in a **manifest** — endpoint, filters, output fields, timestamp,
 Neon-reported counts, file SHA-256 hashes, and the code commit that produced it — so any figure can
 be reproduced exactly. See the *data-and-provenance* notebook chapter.
+
+**Always saved, never lost.** Every record retrieved from the Neon API streams straight to disk
+into immutable, date-stamped folders under `data/00_raw/neon/` as it arrives — never held only in
+memory. So if API access is ever lost, every previously pulled dataset remains and analysis still
+runs. Downstream code loads saved data via `hh.io.load_raw()`, never the live API.
