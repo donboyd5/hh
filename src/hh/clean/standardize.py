@@ -43,3 +43,11 @@ def standardize_columns(df: pd.DataFrame, mapping: dict | None = None) -> pd.Dat
             if mapped and mapped != col:
                 rename[col] = mapped
     return df.rename(columns=rename)
+
+
+def yes_to_bool(series: pd.Series) -> pd.Series:
+    """True where the value is "Yes" (case-insensitive), else False (matches R's == "Yes").
+
+    Dtype-agnostic: pandas 3.0 defaults string columns to StringDtype, not object.
+    """
+    return series.astype("string").str.strip().str.lower().eq("yes").fillna(False)

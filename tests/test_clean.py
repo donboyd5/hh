@@ -71,3 +71,67 @@ def test_clean_accounts_yes_to_bool_and_rollup():
     assert list(out["group"]) == ["household", "account", "account"]
     assert list(out["id"]) == ["H1", "A2", "A3"]
     assert list(out["name"]) == ["Doe House", "John Doe", "Acme"]
+
+
+def test_clean_donations_parses_and_recovers_household():
+    from hh.clean.donations import clean_donations
+
+    donations = pd.DataFrame(
+        {
+            "Donation ID": ["D1", "D2"],
+            "Account ID": ["A1", "A2"],
+            "Donation Amount": ["100.00", "250"],
+            "Donation Date": ["2024-01-15", "2024-06-01"],
+            "Donation Status": ["SUCCEEDED", "CANCELED"],
+            "Account Type": ["Individual", "Individual"],
+            "Full Name (F)": ["Jane Doe", "John Doe"],
+        }
+    )
+    accounts = pd.DataFrame(
+        {
+            "account_id": ["A1", "A2"],
+            "household_id": ["H1", None],
+            "household_name": ["Doe House", None],
+            "full_name": ["Jane Doe", "John Doe"],
+        }
+    )
+    out = clean_donations(donations, accounts=accounts)
+    assert list(out["donation_amount"]) == [100.0, 250.0]
+    assert pd.api.types.is_datetime64_any_dtype(out["donation_date"])
+    assert list(out["id"]) == ["H1", "A2"]  # household recovered for A1; A2 stays account-level
+    assert list(out["group"]) == ["household", "account"]
+
+
+def test_clean_registrations_joins_category_and_household():
+    from hh.clean.registrations import clean_registrations
+
+    regs = pd.DataFrame(
+        {
+            "id": ["R1", "R2"],
+            "eventId": ["E1", "E2"],
+            "registrantAccountId": ["A1", "A2"],
+            "registrationAmount": ["50", "75"],
+            "registrationDateTime": ["2024-03-01", "2024-04-01"],
+        }
+    )
+    events = pd.DataFrame(
+        {
+            "event_id": ["E1", "E2"],
+            "event_majorcat": ["performance", "class"],
+            "event_name": ["Hamlet", "Tap"],
+            "starts_on": pd.to_datetime(["2024-03-01", "2024-04-01"]),
+        }
+    )
+    accounts = pd.DataFrame(
+        {
+            "account_id": ["A1", "A2"],
+            "household_id": ["H1", None],
+            "household_name": ["Doe House", None],
+            "full_name": ["Jane Doe", "John Doe"],
+        }
+    )
+    out = clean_registrations(regs, events=events, accounts=accounts)
+    assert list(out["amount"]) == [50.0, 75.0]
+    assert list(out["event_majorcat"]) == ["performance", "class"]
+    assert list(out["id"]) == ["H1", "A2"]
+    assert list(out["group"]) == ["household", "account"]

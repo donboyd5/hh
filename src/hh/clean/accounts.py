@@ -9,7 +9,7 @@ import pandas as pd
 
 from ..io import load_raw
 from .households import add_rollup
-from .standardize import standardize_columns
+from .standardize import standardize_columns, yes_to_bool
 
 # Neon API output-field name -> standard name (accounts).
 ACCOUNT_FIELDS = {
@@ -36,23 +36,13 @@ ACCOUNT_FIELDS = {
 }
 
 
-def _yes_to_bool(series: pd.Series) -> pd.Series:
-    """True where the value is "Yes" (case-insensitive), else False (matches R's == "Yes").
-
-    Dtype-agnostic (pandas 3.0 defaults string columns to StringDtype, not object).
-    """
-    return (
-        series.astype("string").str.strip().str.lower().eq("yes").fillna(False)
-    )
-
-
 def clean_accounts(raw: pd.DataFrame | None = None, *, pull_dir=None) -> pd.DataFrame:
     """Return cleaned accounts with id/name/group; reads the latest pull if ``raw`` is None."""
     df = raw if raw is not None else load_raw("accounts", pull_dir=pull_dir)
     df = standardize_columns(df, mapping=ACCOUNT_FIELDS)
     if "deceased" in df.columns:
-        df["deceased"] = _yes_to_bool(df["deceased"])
+        df["deceased"] = yes_to_bool(df["deceased"])
     if "do_not_contact" in df.columns:
-        df["do_not_contact"] = _yes_to_bool(df["do_not_contact"])
+        df["do_not_contact"] = yes_to_bool(df["do_not_contact"])
     df = add_rollup(df, name_cols=("household_name", "full_name", "company_name"))
     return df
