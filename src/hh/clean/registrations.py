@@ -47,8 +47,13 @@ def clean_registrations(
         df["registered_at"] = pd.to_datetime(df["registered_at"], errors="coerce")
 
     if events is not None and "event_id" in df.columns and "event_id" in events.columns:
+        cols = [
+            c
+            for c in ("event_majorcat", "event_minorcat", "event_name", "starts_on")
+            if c in events.columns
+        ]
         ev = (
-            events[["event_id", "event_majorcat", "event_name", "starts_on"]]
+            events[["event_id", *cols]]
             .dropna(subset=["event_id"])
             .drop_duplicates(subset=["event_id"])
         )
