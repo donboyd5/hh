@@ -29,7 +29,10 @@ by_band = (
     .reset_index()
 )
 by_band["share"] = by_band["dollars"] / by_band["dollars"].sum()
-by_band.style.format({"dollars": money, "mean_gift": money, "share": pct})
+by_band["cum_share"] = by_band["dollars"].cumsum() / by_band["dollars"].sum()
+by_band.style.format(
+    {"dollars": money, "mean_gift": money, "share": pct, "cum_share": pct}
+)
 ```
 
 ```{python}
