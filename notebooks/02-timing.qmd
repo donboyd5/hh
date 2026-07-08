@@ -238,3 +238,7 @@ slot.style.format(
 Saturday matinees — the weakest slot of the weekend. Sunday's single 2 pm show
 (`{python} per_perf['Sunday']` per show) draws as well as any slot, so the matinee habit is a
 Sunday habit, not a Saturday one.**
+
+The per-performance numbers above pool 2013–2026, but the day ranking has not been stable —
+Sunday has become the strongest day in recent years. That story is in
+[How things changed over time](04-trends.html).

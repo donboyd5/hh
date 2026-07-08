@@ -81,3 +81,124 @@ fig.update_layout(
 fig.update_yaxes(tickformat=".0%")
 style(fig).show()
 ```
+
+## Fri vs Sat vs Sun within theater runs, over time
+
+The figure above pools every event, so it mostly reflects *what gets scheduled* — more Saturday
+events means more Saturday attendance. To ask whether the **audience's day preference** has
+shifted, this section holds the product constant: only theater production runs that played all
+three of Friday, Saturday, and Sunday (reconstructed by the manual event-name mapping described
+in [When people come](02-timing.html)), measured as **attendees per performance** so days with
+two shows don't get double credit. Headcount is ticket attendees whose registration succeeded.
+
+```{python}
+#| label: setup-run-trends
+from hh.analytics.productions import theater_performances, full_weekend_runs
+
+fw = full_weekend_runs(theater_performances(read_parquet("processed", "registrations_enriched.parquet")))
+wk = fw[fw["weekday"].isin(["Friday", "Saturday", "Sunday"])].copy()
+DAY_COLORS = {"Friday": CATEGORICAL[0], "Saturday": CATEGORICAL[1], "Sunday": CATEGORICAL[2]}
+
+run_day = (
+    wk.groupby(["production_run", "weekday"], as_index=False)
+    .agg(performances=("starts_on", "count"), attendees=("attendees", "sum"))
+)
+run_day["rate"] = run_day["attendees"] / run_day["performances"]
+run_day["run_start"] = run_day["production_run"].map(
+    wk.groupby("production_run")["starts_on"].min()
+)
+run_totals = wk.groupby("production_run")["attendees"].sum()
+run_day = run_day[run_day["production_run"].map(run_totals) >= 30]
+
+recent = run_day[run_day["run_start"] >= "2021-01-01"]
+best_day = recent.loc[recent.groupby("production_run")["rate"].idxmax(), "weekday"]
+n_recent = recent["production_run"].nunique()
+n_recent_sun = int((best_day == "Sunday").sum())
+
+wk["period"] = period(wk["starts_on"].dt.year)
+pd_rate = (
+    wk.groupby(["period", "weekday"], observed=True)
+    .agg(performances=("starts_on", "count"), attendees=("attendees", "sum"))
+    .reset_index()
+)
+pd_rate["rate"] = pd_rate["attendees"] / pd_rate["performances"]
+rate_of = lambda p, d: pd_rate.set_index(["period", "weekday"])["rate"].loc[(p, d)]
+```
+
+One dot per run and day — each run's attendees per performance on Fridays, Saturdays, and
+Sundays (runs with fewer than 30 Fri–Sun attendees omitted):
+
+```{python}
+#| label: fig-run-rate-over-time
+#| fig-cap: "Attendees per performance by day, one point per full-weekend theater run"
+fig = px.scatter(
+    run_day.sort_values("run_start"),
+    x="run_start",
+    y="rate",
+    color="weekday",
+    color_discrete_map=DAY_COLORS,
+    category_orders={"weekday": ["Friday", "Saturday", "Sunday"]},
+    hover_name="production_run",
+    custom_data=["performances", "attendees"],
+)
+fig.update_traces(
+    hovertemplate=(
+        "<b>%{hovertext}</b><br>%{y:.0f} attendees/perf "
+        "(%{customdata[1]:,} over %{customdata[0]} shows)<extra>%{fullData.name}</extra>"
+    )
+)
+for d in ("Friday", "Saturday", "Sunday"):  # 5-run rolling average as a guide line
+    s = run_day[run_day["weekday"] == d].sort_values("run_start")
+    fig.add_scatter(
+        x=s["run_start"],
+        y=s["rate"].rolling(5, center=True, min_periods=3).mean(),
+        mode="lines",
+        line=dict(color=DAY_COLORS[d], width=1.5),
+        opacity=0.6,
+        showlegend=False,
+        hoverinfo="skip",
+    )
+fig.update_layout(
+    xaxis_title="Run opening date", yaxis_title="Attendees per performance", legend_title=""
+)
+style(fig).show()
+```
+
+Aggregated to the same periods as the figures above:
+
+```{python}
+#| label: fig-run-rate-periods
+#| fig-cap: "Attendees per performance by day and period, full-weekend theater runs only"
+fig = px.bar(
+    pd_rate,
+    x="period",
+    y="rate",
+    color="weekday",
+    barmode="group",
+    color_discrete_map=DAY_COLORS,
+    category_orders={"period": PERIODS, "weekday": ["Friday", "Saturday", "Sunday"]},
+    custom_data=["performances"],
+)
+fig.update_traces(
+    hovertemplate="%{y:.1f} attendees/perf (%{customdata[0]} shows)<extra>%{fullData.name}</extra>"
+)
+fig.update_layout(
+    xaxis_title="Period", yaxis_title="Attendees per performance", legend_title=""
+)
+style(fig).show()
+```
+
+**Per-performance attendance has roughly doubled across the periods, and the day ranking has
+flipped. In 2013–2015 Friday was the strongest day
+(`{python} f"{rate_of('2013–2015', 'Friday'):.0f}"` per show vs
+`{python} f"{rate_of('2013–2015', 'Sunday'):.0f}"` on Sunday); in 2016–2020 the days were about
+even; since 2021 Sunday is clearly strongest —
+`{python} f"{rate_of('2021–2026', 'Sunday'):.0f}"` per show vs about
+`{python} f"{rate_of('2021–2026', 'Friday'):.0f}"` on Friday and Saturday. Sunday has been the
+best-attended day in `{python} f"{n_recent_sun}"` of the `{python} f"{n_recent}"` full-weekend
+runs since 2021.**
+
+Recent-period caveats: 2021–2026 rests on `{python} f"{n_recent}"` runs
+(`{python} f"{int(wk[wk['period'] == '2021–2026'].shape[0])}"` performances), and recent runs
+rarely schedule Saturday matinees, which used to pull Saturday's average down — yet Sunday leads
+anyway.

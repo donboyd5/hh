@@ -51,7 +51,9 @@ n_all3 = f"{int((households['is_donor'] & households['is_patron'] & households['
   of Hubbard Hall (`{python} within5` within 5 miles; `{python} within20` within 20 miles).
 - **Theater draws on Saturday; music on Sunday.** But within a theater run that plays
   Fri/Sat/Sun, Saturday leads only because it usually has two shows — per performance the three
-  days are essentially tied, and Saturday matinees are the weekend's weakest slot.
+  days are essentially tied, and Saturday matinees are the weekend's weakest slot. The ranking
+  is shifting: since 2021, Sunday has been the best-attended day per performance in nearly every
+  full-weekend run.
 - **Strong overlap:** of `{python} n_hh` households, `{python} n_donors` donate,
   `{python} n_patrons` attend performances, and `{python} n_class` take classes;
   `{python} n_donor_class` both donate and take classes, `{python} n_all3` do all three.
