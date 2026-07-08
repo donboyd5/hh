@@ -49,12 +49,14 @@ n_all3 = f"{int((households['is_donor'] & households['is_patron'] & households['
 
 - **Donors are local.** About **`{python} within10`** of donated dollars come from within 10 miles
   of Hubbard Hall (`{python} within5` within 5 miles; `{python} within20` within 20 miles).
-- **Theater draws on Saturday; music on Sunday.**
+- **Theater draws on Saturday; music on Sunday.** But within a theater run that plays
+  Fri/Sat/Sun, Saturday leads only because it usually has two shows — per performance the three
+  days are essentially tied, and Saturday matinees are the weekend's weakest slot.
 - **Strong overlap:** of `{python} n_hh` households, `{python} n_donors` donate,
   `{python} n_patrons` attend performances, and `{python} n_class` take classes;
   `{python} n_donor_class` both donate and take classes, `{python} n_all3` do all three.
 
 > **A note on "multi-day runs."** Each performance night is a separate Neon event — there is no
-> field linking the nights of a run. Of 404 theater events, only one name spans multiple dates, so
-> "shows that ran Fri/Sat/Sun" can't be identified from the data as stored. Theater attendance by
-> day of week (including Fri/Sat/Sun) is in the [When people come](02-timing.html) chapter.
+> field linking the nights of a run — so runs are reconstructed by manually mapping event names to
+> productions (`hh.analytics.productions`). Attendance by day within Fri/Sat/Sun theater runs is
+> in the [When people come](02-timing.html) chapter.

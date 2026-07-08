@@ -78,3 +78,163 @@ theater = regs[regs["event_minorcat"] == "theater"].dropna(subset=["weekday", "d
     .style.format("{:,}")
 )
 ```
+
+## Within a run: Friday, Saturday, or Sunday?
+
+The panels above pool every theater event, including one-night shows, so a "Saturday peak" could
+just mean more shows are booked on Saturdays. A sharper version of the question: when the *same*
+production plays Friday, Saturday, **and** Sunday, which day do people pick?
+
+Neon stores each performance as a separate event (e.g. "Fun Home - Friday, February 3 at
+7:30 pm") with no field linking the nights of a run, so event names were manually mapped to
+productions (`hh.analytics.productions`), and a production's performances are split into
+separate runs when more than 45 days apart. This section keeps only production runs that played
+**all three** of Friday, Saturday, and Sunday — mostly mainstage shows running one to four
+weekends.
+
+Two other differences from the counts above: attendance here is true **headcount** (ticket
+attendees whose registration succeeded, not registrations — one registration averages about two
+people), and canceled or moved performances, open rehearsals, online productions, and weekday
+10 am school shows are excluded.
+
+```{python}
+#| label: setup-runs
+from hh.viz import CATEGORICAL
+from hh.analytics.productions import theater_performances, full_weekend_runs, time_slot
+
+perf = theater_performances(regs)
+fw = full_weekend_runs(perf)
+
+day_order = [d for d in WEEKDAY_ORDER if d in set(fw["weekday"])]
+day = (
+    fw.groupby("weekday")
+    .agg(performances=("swept_event_id", "count"), attendees=("attendees", "sum"))
+    .reindex(day_order)
+)
+day["attendees per performance"] = day["attendees"] / day["performances"]
+day["share of attendees"] = day["attendees"] / day["attendees"].sum()
+
+n_runs = fw["production_run"].nunique()
+yr_span = f"{fw['starts_on'].min():%Y}–{fw['starts_on'].max():%Y}"
+sat_share = f"{day.loc['Saturday', 'share of attendees']:.0%}"
+per_perf = {
+    d: f"{day.loc[d, 'attendees per performance']:.0f}"
+    for d in ("Friday", "Saturday", "Sunday")
+}
+```
+
+Across the **`{python} f"{n_runs}"` qualifying production runs** (`{python} yr_span`),
+**`{python} f"{len(fw):,}"` performances** drew **`{python} f"{int(fw['attendees'].sum()):,}"`
+attendees**. Any weekday rows below Friday–Sunday are the rare midweek performances inside a
+qualifying run (Winter Carnival 2015 played two Thursdays):
+
+```{python}
+#| label: tab-run-day
+day.style.format(
+    {
+        "performances": "{:,}",
+        "attendees": "{:,}",
+        "attendees per performance": "{:.1f}",
+        "share of attendees": "{:.1%}",
+    }
+)
+```
+
+**Saturday brings in the most people (`{python} sat_share` of attendees) — but only because most
+runs play Saturday twice (matinee + evening). Per performance the three days are essentially
+tied: Friday `{python} per_perf['Friday']`, Saturday `{python} per_perf['Saturday']`, and Sunday
+`{python} per_perf['Sunday']` attendees per show.**
+
+How each production splits across the three days (runs with fewer than 30 Fri–Sun attendees are
+left off the chart but appear in the table below):
+
+```{python}
+#| label: fig-run-day-share
+#| fig-cap: "Share of each run's Fri–Sun attendees by day — one bar per production run, oldest at top"
+wk = fw[fw["weekday"].isin(["Friday", "Saturday", "Sunday"])]
+run_day = wk.groupby(["production_run", "weekday"], as_index=False)["attendees"].sum()
+run_day["share"] = run_day["attendees"] / run_day.groupby("production_run")[
+    "attendees"
+].transform("sum")
+order = fw.groupby("production_run")["starts_on"].min().sort_values().index.tolist()
+run_totals = wk.groupby("production_run")["attendees"].sum()
+charted = [r for r in order if run_totals[r] >= 30]
+
+fig = px.bar(
+    run_day[run_day["production_run"].isin(charted)],
+    x="share",
+    y="production_run",
+    color="weekday",
+    orientation="h",
+    category_orders={
+        "production_run": charted[::-1],
+        "weekday": ["Friday", "Saturday", "Sunday"],
+    },
+    color_discrete_map={
+        "Friday": CATEGORICAL[0],
+        "Saturday": CATEGORICAL[1],
+        "Sunday": CATEGORICAL[2],
+    },
+    custom_data=["attendees"],
+)
+fig.update_traces(
+    hovertemplate="%{x:.0%} — %{customdata[0]:,} attendees<extra>%{fullData.name}</extra>"
+)
+fig.update_layout(
+    height=740,
+    xaxis_tickformat=".0%",
+    xaxis_title="Share of run's Fri–Sun attendees",
+    yaxis_title="",
+)
+style(fig).show()
+```
+
+The same runs in detail — attendees by day, with each run's dates and performance count:
+
+```{python}
+#| label: tab-run-detail
+by_day = (
+    fw.pivot_table(
+        index="production_run",
+        columns="weekday",
+        values="attendees",
+        aggfunc="sum",
+        fill_value=0,
+    )
+    .reindex(columns=day_order)
+)
+by_day["Total"] = by_day.sum(axis=1)
+meta = fw.groupby("production_run").agg(
+    first=("starts_on", "min"), last=("starts_on", "max"), performances=("swept_event_id", "count")
+)
+detail = meta.join(by_day).reindex(order)
+detail["first"] = detail["first"].dt.strftime("%b %d, %Y")
+detail["last"] = detail["last"].dt.strftime("%b %d, %Y")
+detail.index.name = None
+detail = detail.rename(columns={"first": "First", "last": "Last", "performances": "Perfs"})
+detail.style.format("{:,}", subset=[c for c in detail.columns if c not in ("First", "Last")])
+```
+
+Saturday's totals hide one more split: most runs play a 2 pm matinee *and* an evening show that
+day. Splitting Saturday performances by time slot:
+
+```{python}
+#| label: tab-sat-slot
+sat = fw[fw["weekday"] == "Saturday"].assign(slot=lambda d: d["event_name"].map(time_slot))
+slot = (
+    sat.groupby("slot")
+    .agg(performances=("swept_event_id", "count"), attendees=("attendees", "sum"))
+    .reindex(["matinee", "evening"])
+)
+slot["attendees per performance"] = slot["attendees"] / slot["performances"]
+mat_rate = f"{slot.loc['matinee', 'attendees per performance']:.0f}"
+eve_rate = f"{slot.loc['evening', 'attendees per performance']:.0f}"
+slot.style.format(
+    {"performances": "{:,}", "attendees": "{:,}", "attendees per performance": "{:.1f}"}
+)
+```
+
+**Saturday evenings draw `{python} eve_rate` attendees per show versus `{python} mat_rate` for
+Saturday matinees — the weakest slot of the weekend. Sunday's single 2 pm show
+(`{python} per_perf['Sunday']` per show) draws as well as any slot, so the matinee habit is a
+Sunday habit, not a Saturday one.**

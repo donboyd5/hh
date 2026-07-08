@@ -119,3 +119,65 @@ def test_household_summary_flags_and_counts():
     assert bool(h.loc["H1", "is_donor"]) and bool(h.loc["H1", "is_class_taker"])
     assert h.loc["A2", "n_perf_theater"] == 1
     assert bool(h.loc["A2", "is_patron"])
+
+
+def test_theater_productions_mapping_and_runs():
+    from hh.analytics.productions import (
+        count_succeeded_attendees,
+        full_weekend_runs,
+        is_excluded,
+        match_production,
+        theater_performances,
+        time_slot,
+    )
+
+    assert match_production("Theater: Ondine - Friday, November 15") == "Ondine"
+    assert match_production("Fun Home - Saturday, February 4 at 7:30 pm") == "Fun Home"
+    assert match_production("Some Brand New Show") is None
+    assert is_excluded("The Mystery of Edwin Drood - Sat.Nov.25.7:30pm - Cancelled")
+    assert is_excluded("The Mystery of Edwin Drood - Tues. Nov 21 at 10am")
+    assert not is_excluded("The Mystery of Edwin Drood - Sun.Nov.26.2pm")
+    assert time_slot("Fun Home - Saturday, February 4 - 2:00 pm Matinee") == "matinee"
+    assert time_slot("Fun Home - Saturday, February 4 at 7:30 pm") == "evening"
+
+    tickets = [
+        {"attendees": [{"registrationStatus": "SUCCEEDED"}, {"registrationStatus": "CANCELED"}]},
+        {"attendees": None},
+    ]
+    assert count_succeeded_attendees(tickets) == 1
+    assert count_succeeded_attendees(None) == 0
+
+    # Two Whispering Bones nights a year apart split into separate runs; only the run
+    # covering Fri+Sat+Sun qualifies as a full-weekend run.
+    def reg(rid, eid, name, date):
+        return {
+            "registration_id": rid,
+            "swept_event_id": eid,
+            "event_name": name,
+            "starts_on": pd.Timestamp(date),
+            "event_majorcat": "performance",
+            "event_minorcat": "theater",
+            "tickets": [{"attendees": [{"registrationStatus": "SUCCEEDED"}] * 2}],
+        }
+
+    regs = pd.DataFrame(
+        [
+            reg("r1", "e1", "Fun Home - Friday, February 3 at 7:30 pm", "2023-02-03"),
+            reg("r2", "e2", "Fun Home - Saturday, February 4 at 7:30 pm", "2023-02-04"),
+            reg("r3", "e3", "Fun Home - Sunday, February 5 - 2:00 pm Matinee", "2023-02-05"),
+            reg("r4", "e4", "Whispering Bones - Saturday, October 27th at 7:30pm", "2018-10-27"),
+            reg("r5", "e5", "Whispering Bones - Ghost Stories - Sat, October 26", "2024-10-26"),
+            reg("r6", "e1", "Fun Home - Friday, February 3 at 7:30 pm", "2023-02-03"),
+        ]
+    )
+    perf = theater_performances(regs)
+    assert set(perf["production_run"]) == {
+        "Fun Home (2023)",
+        "Whispering Bones (2018)",
+        "Whispering Bones (2024)",
+    }
+    fri = perf[perf["starts_on"] == pd.Timestamp("2023-02-03")]
+    assert fri["attendees"].iloc[0] == 4 and fri["registrations"].iloc[0] == 2
+
+    fw = full_weekend_runs(perf)
+    assert set(fw["production_run"]) == {"Fun Home (2023)"}
