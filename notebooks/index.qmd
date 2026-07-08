@@ -1,0 +1,33 @@
+---
+editor_options:
+  chunk_output_type: console
+---
+
+# Hubbard Hall constituent analysis
+
+This book explores Hubbard Hall's constituents — **donors, patrons, and class-takers** — using data
+pulled directly from the **Neon CRM** API. Every figure is reproducible: data is extracted, cleaned,
+geocoded, and summarized by the `hh` package, then read from saved parquet tables in
+`data/20_processed/`.
+
+All charts here are **aggregates** (counts and dollar totals by category, distance band, and day of
+week) — no individual is identified.
+
+**Headline findings**
+
+- **Donors are local.** About **two-thirds of donated dollars** come from within 10 miles of
+  Hubbard Hall; ~86% within 20 miles.
+- **Theater draws on Saturday; music on Sunday.**
+- **Strong overlap:** of ~4,600 households, 1,298 donate, 2,745 attend performances, and 1,819 take
+  classes; **629 both donate and take classes**, 418 do all three.
+
+```{python}
+#| label: setup
+import pandas as pd
+import plotly.express as px
+from hh.io import read_parquet
+from hh.viz import style, CATEGORICAL, BLUE, SEQUENTIAL_BLUE, INK, MUTED
+
+households = read_parquet("processed", "households_summary.parquet")
+regs = read_parquet("processed", "registrations_enriched.parquet")
+```

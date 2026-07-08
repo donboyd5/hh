@@ -1,0 +1,54 @@
+---
+editor_options:
+  chunk_output_type: console
+---
+
+# When people come
+
+Which days of the week draw the most attendance? Counts below are registrations (a proxy for
+headcount), grouped by the event's performance date.
+
+```{python}
+#| label: setup-time
+import pandas as pd
+import plotly.express as px
+from hh.io import read_parquet
+from hh.viz import style, CATEGORICAL
+
+regs = read_parquet("processed", "registrations_enriched.parquet")
+
+# attendance by weekday for the performance sub-types + classes
+focus = regs[regs["event_minorcat"].isin(["theater", "music", "dance", "opera"])].copy()
+focus["facet"] = "performance"
+clz = regs[regs["event_majorcat"] == "class"].assign(facet="class")
+combo = pd.concat([focus.assign(cat=focus["event_minorcat"]), clz.assign(cat="class")])
+combo = combo.dropna(subset=["weekday"])
+tab = combo.groupby(["weekday", "cat"], observed=True).size().reset_index(name="attendance")
+tab
+```
+
+```{python}
+#| label: fig-weekday-by-cat
+#| fig-cap: "Attendance by day of week, by category"
+order = ["theater", "music", "dance", "opera", "class"]
+fig = px.bar(
+    tab, x="weekday", y="attendance", color="cat",
+    category_orders={"cat": order}, barmode="group",
+    color_discrete_sequence=CATEGORICAL,
+)
+fig.update_layout(
+    xaxis_title="Day of week", yaxis_title="Registrations (attendance proxy)", legend_title=""
+)
+style(fig).show()
+```
+
+**Theater peaks Saturday; music peaks Sunday.** Classes spread across the week with a Friday peak.
+To answer "how far do people come for theater on Friday/Saturday vs Sunday," slice the same table by
+distance band:
+
+```{python}
+#| label: tab-theater-day-band
+theater = regs[regs["event_minorcat"] == "theater"].dropna(subset=["weekday", "distance_band"])
+(theater.groupby(["weekday", "distance_band"], observed=True).size()
+        .unstack("distance_band").fillna(0).astype(int))
+```

@@ -1,0 +1,63 @@
+---
+editor_options:
+  chunk_output_type: console
+---
+
+# Where donors live
+
+How far do Hubbard Hall's donors live from the hall? Distances are straight-line (haversine) from
+the venue (25 E Main St, Cambridge NY) to each donor household, bucketed into 1 / 10 / 20+ mile
+bands. Donors whose only address is a PO box are placed at their ZIP's centroid and flagged
+"approximate" (excluded from the tight 1-mile count so it stays honest).
+
+```{python}
+#| label: setup-geo
+import pandas as pd
+import plotly.express as px
+from hh.io import read_parquet
+from hh.viz import style, BLUE
+
+households = read_parquet("processed", "households_summary.parquet")
+donors = households[households["is_donor"]]
+by_band = (
+    donors.groupby("distance_band", observed=True)
+    .agg(households=("id", "count"), dollars=("total_donations", "sum"))
+    .reset_index()
+)
+by_band["share"] = (by_band["dollars"] / by_band["dollars"].sum()).round(3)
+by_band
+```
+
+```{python}
+#| label: fig-dollars-band
+#| fig-cap: "Donated dollars by distance band"
+fig = px.bar(by_band, x="distance_band", y="dollars", color_discrete_sequence=[BLUE])
+fig.update_layout(
+    showlegend=False, xaxis_title="Distance from Hubbard Hall", yaxis_title="Donated $"
+)
+style(fig).show()
+```
+
+```{python}
+#| label: fig-households-band
+#| fig-cap: "Donor households by distance band"
+fig = px.bar(by_band, x="distance_band", y="households", color_discrete_sequence=[BLUE])
+fig.update_layout(
+    showlegend=False, xaxis_title="Distance from Hubbard Hall", yaxis_title="Donor households"
+)
+style(fig).show()
+```
+
+Giving is overwhelmingly local. The tightest band includes some approximate (ZIP-centroid)
+placements — here is the centroid share within each band, to read the 1-mile number in context:
+
+```{python}
+#| label: precision-by-band
+prec = (
+    donors.groupby("distance_band", observed=True)["geo_precision"]
+    .apply(lambda s: (s == "centroid").mean())
+    .round(2)
+    .to_frame("centroid_share")
+)
+prec
+```

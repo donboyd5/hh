@@ -42,3 +42,7 @@ _web/
 Thumbs.db
 .vscode/
 .idea/
+
+# Quarto render artifacts
+*.quarto_ipynb
+notebooks/.quarto/

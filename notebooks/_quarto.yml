@@ -1,0 +1,26 @@
+project:
+  type: book
+  output-dir: _web
+
+book:
+  title: "Hubbard Hall — constituent analysis"
+  author: "Don Boyd"
+  date: today
+  chapters:
+    - index.qmd
+    - 01-donor-geography.qmd
+    - 02-timing.qmd
+    - 03-overlap.qmd
+
+format:
+  html:
+    theme: cosmo
+    toc: true
+    code-fold: true
+    fig-width: 8
+    fig-height: 4.5
+
+jupyter: hh
+
+execute:
+  warning: false
