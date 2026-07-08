@@ -8,18 +8,13 @@ editor_options:
 This book explores Hubbard Hall's constituents — **donors, patrons, and class-takers** — using data
 pulled directly from the **Neon CRM** API. Every figure is reproducible: data is extracted, cleaned,
 geocoded, and summarized by the `hh` package, then read from saved parquet tables in
-`data/20_processed/`.
+`data/20_processed/`. All numbers in the prose below are computed from the data, so they stay
+correct as the data is refreshed.
 
 All charts here are **aggregates** (counts and dollar totals by category, distance band, and day of
 week) — no individual is identified.
 
 **Headline findings**
-
-- **Donors are local.** About **54% of donated dollars** come from within 10 miles of Hubbard Hall
-  (41% within 5 miles; ~77% within 20 miles).
-- **Theater draws on Saturday; music on Sunday.**
-- **Strong overlap:** of ~4,600 households, 1,298 donate, 2,745 attend performances, and 1,819 take
-  classes; **629 both donate and take classes**, 418 do all three.
 
 ```{python}
 #| label: setup
@@ -30,4 +25,36 @@ from hh.viz import style, CATEGORICAL, BLUE, SEQUENTIAL_BLUE, INK, MUTED
 
 households = read_parquet("processed", "households_summary.parquet")
 regs = read_parquet("processed", "registrations_enriched.parquet")
+
+# headline figures (computed, not hardcoded)
+_order = ["[0, 1)", "[1, 5)", "[5, 10)", "[10, 20)", "[20, ∞)"]
+_d = (
+    households[households["is_donor"]]
+    .groupby("distance_band", observed=True)["total_donations"]
+    .sum()
+    .reindex(_order)
+    .fillna(0)
+)
+_c = _d.cumsum() / _d.sum()
+within5, within10, within20 = (
+    f"{_c.loc[b]:.0%}" for b in ("[1, 5)", "[5, 10)", "[10, 20)")
+)
+n_hh = f"{len(households):,}"
+n_donors = f"{int(households['is_donor'].sum()):,}"
+n_patrons = f"{int(households['is_patron'].sum()):,}"
+n_class = f"{int(households['is_class_taker'].sum()):,}"
+n_donor_class = f"{int((households['is_donor'] & households['is_class_taker']).sum()):,}"
+n_all3 = f"{int((households['is_donor'] & households['is_patron'] & households['is_class_taker']).sum()):,}"
 ```
+
+- **Donors are local.** About **`{python} within10`** of donated dollars come from within 10 miles
+  of Hubbard Hall (`{python} within5` within 5 miles; `{python} within20` within 20 miles).
+- **Theater draws on Saturday; music on Sunday.**
+- **Strong overlap:** of `{python} n_hh` households, `{python} n_donors` donate,
+  `{python} n_patrons` attend performances, and `{python} n_class` take classes;
+  `{python} n_donor_class` both donate and take classes, `{python} n_all3` do all three.
+
+> **A note on "multi-day runs."** Each performance night is a separate Neon event — there is no
+> field linking the nights of a run. Of 404 theater events, only one name spans multiple dates, so
+> "shows that ran Fri/Sat/Sun" can't be identified from the data as stored. Theater attendance by
+> day of week (including Fri/Sat/Sun) is in the [When people come](02-timing.html) chapter.

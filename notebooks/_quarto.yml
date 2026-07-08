@@ -11,6 +11,7 @@ book:
     - 01-donor-geography.qmd
     - 02-timing.qmd
     - 03-overlap.qmd
+    - 04-trends.qmd
 
 format:
   html:
