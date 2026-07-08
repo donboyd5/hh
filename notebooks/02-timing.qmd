@@ -5,50 +5,76 @@ editor_options:
 
 # When people come
 
-Which days of the week draw the most attendance? Counts below are registrations (a proxy for
-headcount), grouped by the event's performance date.
+Which days of the week draw the most attendance? Counts below are **registrations** (a proxy for
+headcount), grouped by the event's performance date. Each panel is one kind of programming.
 
 ```{python}
 #| label: setup-time
 import pandas as pd
 import plotly.express as px
 from hh.io import read_parquet
-from hh.viz import style, CATEGORICAL
+from hh.viz import style, BLUE
+from hh.analytics.timing import WEEKDAY_ORDER
 
 regs = read_parquet("processed", "registrations_enriched.parquet")
+cat_order = ["theater", "music", "dance", "opera", "class"]
 
-# attendance by weekday for the performance sub-types + classes
-focus = regs[regs["event_minorcat"].isin(["theater", "music", "dance", "opera"])].copy()
-focus["facet"] = "performance"
-clz = regs[regs["event_majorcat"] == "class"].assign(facet="class")
-combo = pd.concat([focus.assign(cat=focus["event_minorcat"]), clz.assign(cat="class")])
+named = regs[regs["event_minorcat"].isin(cat_order)].assign(
+    cat=lambda d: d["event_minorcat"]
+)
+combo = pd.concat([named, regs[regs["event_majorcat"] == "class"].assign(cat="class")])
 combo = combo.dropna(subset=["weekday"])
-tab = combo.groupby(["weekday", "cat"], observed=True).size().reset_index(name="attendance")
-tab
+tab = combo.groupby(["cat", "weekday"], observed=True).size().reset_index(name="attendance")
 ```
 
 ```{python}
-#| label: fig-weekday-by-cat
-#| fig-cap: "Attendance by day of week, by category"
-order = ["theater", "music", "dance", "opera", "class"]
+#| label: fig-weekday-facet
+#| fig-cap: "Attendance by day of week — one panel per programming type"
 fig = px.bar(
-    tab, x="weekday", y="attendance", color="cat",
-    category_orders={"cat": order}, barmode="group",
-    color_discrete_sequence=CATEGORICAL,
+    tab,
+    x="weekday",
+    y="attendance",
+    facet_col="cat",
+    category_orders={"cat": cat_order, "weekday": WEEKDAY_ORDER},
+    color_discrete_sequence=[BLUE],
 )
-fig.update_layout(
-    xaxis_title="Day of week", yaxis_title="Registrations (attendance proxy)", legend_title=""
-)
+fig.update_layout(yaxis_title="Registrations")
+fig.for_each_xaxis(lambda a: a.update(title=""))
+fig.update_traces(hovertemplate="%{y:,.0f}<extra></extra>")
 style(fig).show()
 ```
 
-**Theater peaks Saturday; music peaks Sunday.** Classes spread across the week with a Friday peak.
-To answer "how far do people come for theater on Friday/Saturday vs Sunday," slice the same table by
-distance band:
+The same data as a table — each programming type (rows) by day of week (columns), sorted by type
+then day:
+
+```{python}
+#| label: tab-cat-weekday
+pivot = (
+    tab.pivot(index="cat", columns="weekday", values="attendance")
+    .reindex(index=[c for c in cat_order if c in set(tab["cat"])])
+    .reindex(columns=WEEKDAY_ORDER)
+    .fillna(0)
+    .astype(int)
+)
+pivot.style.format("{:,}")
+```
+
+**Theater peaks Saturday; music peaks Sunday. Classes spread across the week with a Friday peak.**
+
+The next table is about *distance*, not volume: for **theater only**, it shows how many attendees
+came from each distance band on each day of the week (rows = day, columns = distance band). It
+answers questions like "do Friday/Saturday theater audiences travel farther than Sunday's?"
 
 ```{python}
 #| label: tab-theater-day-band
 theater = regs[regs["event_minorcat"] == "theater"].dropna(subset=["weekday", "distance_band"])
-(theater.groupby(["weekday", "distance_band"], observed=True).size()
-        .unstack("distance_band").fillna(0).astype(int))
+(
+    theater.groupby(["weekday", "distance_band"], observed=True)
+    .size()
+    .unstack("distance_band")
+    .reindex(WEEKDAY_ORDER)
+    .fillna(0)
+    .astype(int)
+    .style.format("{:,}")
+)
 ```

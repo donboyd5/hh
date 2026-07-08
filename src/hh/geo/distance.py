@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 
 EARTH_RADIUS_MILES = 3958.8
-DEFAULT_BANDS = (1, 10, 20)
+DEFAULT_BANDS = (1, 5, 10, 20)
 
 
 def haversine(lat1, lon1, lat2, lon2) -> float:
@@ -35,29 +35,37 @@ def haversine_vec(lat1, lon1, lat2, lon2):
     return 2 * EARTH_RADIUS_MILES * np.arcsin(np.sqrt(a))
 
 
+def band_labels(bands=DEFAULT_BANDS) -> list[str]:
+    """Ordered half-open interval labels, e.g. '[0, 1)', '[1, 5)', ..., '[20, ∞)'."""
+    edges = [0, *bands]
+    labels = [f"[{edges[i]}, {edges[i + 1]})" for i in range(len(edges) - 1)]
+    labels.append(f"[{bands[-1]}, ∞)")
+    return labels
+
+
 def band_label(distance: float, bands=DEFAULT_BANDS) -> str | None:
-    """Label for one distance: '<=1 mi' ... '>20 mi', or None if distance is missing."""
+    """Half-open interval label for one distance, or None if distance is missing."""
     if distance is None or (isinstance(distance, float) and math.isnan(distance)):
         return None
-    for b in bands:
-        if distance <= b:
-            return f"<= {b} mi"
-    return f"> {bands[-1]} mi"
+    edges = [0, *bands]
+    for i in range(len(edges) - 1):
+        if distance < edges[i + 1]:
+            return f"[{edges[i]}, {edges[i + 1]})"
+    return f"[{bands[-1]}, ∞)"
 
 
-def band_series(distances, bands=DEFAULT_BANDS) -> pd.Series:
-    """Categorize a Series of distances into ordered band labels."""
+def band_series(distances, bands=DEFAULT_BANDS):
+    """Categorize a Series of distances into ordered half-open interval labels."""
     s = pd.Series(distances)
     result = pd.Series([None] * len(s), dtype=object, index=s.index)
     remaining = s.notna()
-    for b in bands:
-        mask = remaining & (s <= b)
-        result[mask] = f"<= {b} mi"
+    edges = [0, *bands]
+    for i in range(len(edges) - 1):
+        mask = remaining & (s < edges[i + 1])
+        result[mask] = f"[{edges[i]}, {edges[i + 1]})"
         remaining = remaining & ~mask
-    result[remaining] = f"> {bands[-1]} mi"
-    # ordered categorical
-    order = [f"<= {b} mi" for b in bands] + [f"> {bands[-1]} mi"]
-    return pd.Categorical(result, categories=order, ordered=True)
+    result[remaining] = f"[{bands[-1]}, ∞)"
+    return pd.Categorical(result, categories=band_labels(bands), ordered=True)
 
 
 def assign_bands(

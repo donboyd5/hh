@@ -43,6 +43,22 @@ SURFACE = "#fcfcfb"
 FONT = 'system-ui, -apple-system, "Segoe UI", sans-serif'
 
 
+def money(x) -> str:
+    """USD with commas, no decimals (e.g. 1234.5 -> '$1,235')."""
+    try:
+        return f"${x:,.0f}"
+    except (TypeError, ValueError):
+        return x
+
+
+def pct(x) -> str:
+    """Proportion (0-1) as a percent with one decimal (e.g. 0.649 -> '64.9%')."""
+    try:
+        return f"{x:.1%}"
+    except (TypeError, ValueError):
+        return x
+
+
 def style(fig: go.Figure) -> go.Figure:
     """Apply recessive-grid, system-sans styling and the validated colorway."""
     fig.update_layout(

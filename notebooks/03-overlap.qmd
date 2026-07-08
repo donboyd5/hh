@@ -14,19 +14,25 @@ a class).
 import pandas as pd
 import plotly.express as px
 from hh.io import read_parquet
-from hh.viz import style, CATEGORICAL
+from hh.viz import style, CATEGORICAL, money
 
 hh = read_parquet("processed", "households_summary.parquet")
-counts = {
-    "Donors": hh["is_donor"].sum(),
-    "Patrons (performances)": hh["is_patron"].sum(),
-    "Class-takers": hh["is_class_taker"].sum(),
-    "Donor + class": (hh["is_donor"] & hh["is_class_taker"]).sum(),
-    "Donor + patron": (hh["is_donor"] & hh["is_patron"]).sum(),
-    "All three": (hh["is_donor"] & hh["is_patron"] & hh["is_class_taker"]).sum(),
-}
-counts = pd.Series(counts, name="households").reset_index().rename(columns={"index": "group"})
-counts
+counts = (
+    pd.Series(
+        {
+            "Donors": hh["is_donor"].sum(),
+            "Patrons (performances)": hh["is_patron"].sum(),
+            "Class-takers": hh["is_class_taker"].sum(),
+            "Donor and class": (hh["is_donor"] & hh["is_class_taker"]).sum(),
+            "Donor and patron": (hh["is_donor"] & hh["is_patron"]).sum(),
+            "All three": (hh["is_donor"] & hh["is_patron"] & hh["is_class_taker"]).sum(),
+        },
+        name="households",
+    )
+    .reset_index()
+    .rename(columns={"index": "group"})
+)
+counts.style.format({"households": "{:,}"})
 ```
 
 ```{python}
@@ -34,18 +40,22 @@ counts
 #| fig-cap: "Households in each giving / participation group"
 fig = px.bar(counts, x="group", y="households", color="group", color_discrete_sequence=CATEGORICAL)
 fig.update_layout(showlegend=False, xaxis_title="", yaxis_title="Households")
+fig.update_traces(hovertemplate="%{y:,.0f}<extra></extra>")
 style(fig).show()
 ```
 
-Do more-engaged households also live closer? Mean giving by distance band among donor households:
+Do more-engaged households also live closer? Giving by distance band among donor households:
 
 ```{python}
 #| label: tab-donor-by-band
 donors = hh[hh["is_donor"]]
-(donors.groupby("distance_band", observed=True)
-       .agg(households=("id", "count"),
-            mean_gift=("total_donations", "mean"),
-            median_gift=("total_donations", "median"),
-            total=("total_donations", "sum"))
-       .round(0))
+t = donors.groupby("distance_band", observed=True).agg(
+    households=("id", "count"),
+    mean_gift=("total_donations", "mean"),
+    median_gift=("total_donations", "median"),
+    total=("total_donations", "sum"),
+)
+t.style.format(
+    {"households": "{:,}", "mean_gift": money, "median_gift": money, "total": money}
+)
 ```

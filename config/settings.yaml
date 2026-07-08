@@ -50,5 +50,5 @@ geocode:
 
 # --- Distance bands (miles) ------------------------------------------------
 distance:
-  bands_miles: [1, 10, 20]   # produces bands: <=1, <=10, <=20, >20
+  bands_miles: [1, 5, 10, 20]   # produces half-open bands [0,1) [1,5) [5,10) [10,20) [20,∞)
   method: haversine          # straight-line; 'driving' is a possible future option
