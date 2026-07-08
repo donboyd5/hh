@@ -31,13 +31,17 @@ uv sync                                              # install dependencies
 uv run python -m ipykernel install --user --name hh  # register the Quarto kernel (once)
 ```
 
-### 3. Pull data & render the books  *(later — after the key is set)*
+### 3. Refresh data & render the books  *(after the key is set)*
 
 ```bash
-uv run python scripts/refresh_neon.py   # Neon API -> data/00_raw -> interim -> processed
-uv run python scripts/build.py          # rebuild processed + analytics tables
-quarto render notebooks                 # build the web book(s) -> _web/
+uv run python scripts/pull.py            # Neon API -> data/00_raw (everything saved)
+uv run python scripts/geocode.py         # geocode addresses + distance bands (cached, ~5 min first time)
+uv run python scripts/build.py           # clean -> enrich -> summarize -> data/20_processed
+quarto render notebooks                  # build the web book -> notebooks/_web/
 ```
+
+`pull.py` (accounts/donations/events + reference) and `sweep_registrations.py` (the per-event
+registrations sweep) are separate because the sweep is long; run both for a full refresh.
 
 ---
 
@@ -47,8 +51,8 @@ quarto render notebooks                 # build the web book(s) -> _web/
 config/        settings.yaml · overrides.yaml (manual data fixes) · fieldmap.yaml (Neon->standard names)
 data/          00_raw (immutable extracts) · 10_interim · 20_processed · 30_external · 90_cache · manifest/
 src/hh/        neon/ (API client) · clean/ · categorize/ · geo/ · analytics/ · provenance/
-notebooks/     the Quarto book(s)
-scripts/       refresh_neon.py · build.py · geocode.py · render_books.sh
+notebooks/     the Quarto book (renders to notebooks/_web/)
+scripts/       pull.py · sweep_registrations.py · geocode.py · build.py · probe_neon.py
 tests/         pytest
 docs/          getting-a-neon-api-key.md and more
 R_hhfrc/       legacy R project (separate git repo, PII) — read-only reference + validation oracle
