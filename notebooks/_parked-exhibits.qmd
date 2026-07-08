@@ -1,0 +1,115 @@
+<!--
+Parked exhibits — removed from the rendered book to streamline it (2026-07-08), kept here so
+any of them can be restored by copying the block back into its source chapter. This file is NOT
+rendered: it is not listed in _quarto.yml and its underscore prefix excludes it from the project.
+Each block notes its source chapter and the setup objects it relied on.
+-->
+
+# Parked exhibits (not rendered)
+
+## From "Where do donors live?" — donor households by distance band (chart)
+
+Relied on `by_band` from the chapter's setup chunk. The same numbers remain in the chapter's
+table.
+
+```{python}
+#| label: fig-households-band
+#| fig-cap: "Donor households by distance band (miles)"
+fig = px.bar(by_band, x="distance_band", y="households", color_discrete_sequence=[BLUE])
+fig.update_layout(
+    showlegend=False,
+    xaxis_title="Distance from Hubbard Hall (miles)",
+    yaxis_title="Donor households",
+)
+fig.update_traces(hovertemplate="%{y:,.0f} households<extra></extra>")
+style(fig).show()
+```
+
+## From "Where do donors live?" — average donation per household by band (chart)
+
+Relied on `by_band`. The same numbers remain in the chapter's table (`mean_gift`).
+
+```{python}
+#| label: fig-avg-donation-band
+#| fig-cap: "Average donation per donor household by distance band (miles)"
+fig = px.bar(by_band, x="distance_band", y="mean_gift", color_discrete_sequence=[BLUE])
+fig.update_layout(
+    showlegend=False,
+    xaxis_title="Distance from Hubbard Hall (miles)",
+    yaxis_title="Average donation per household",
+)
+fig.update_yaxes(tickprefix="$", tickformat=",.0f")
+fig.update_traces(hovertemplate="$%{y:,.0f}<extra></extra>")
+style(fig).show()
+```
+
+## From "When do people come to Hubbard Hall?" — pooled category × weekday table
+
+Relied on `tab` / `cat_order` from the pooled section; duplicated the facet chart.
+
+```{python}
+#| label: tab-cat-weekday-pivot
+pivot = (
+    tab.pivot(index="cat", columns="weekday", values="attendance")
+    .reindex(index=[c for c in cat_order if c in set(tab["cat"])])
+    .reindex(columns=WEEKDAY_ORDER)
+    .fillna(0)
+    .astype(int)
+)
+pivot.style.format("{:,}")
+```
+
+## From "When do people come to Hubbard Hall?" — pooled registration share by day, by period
+
+Moved when the *schedule* moved, not the audience; the within-run over-time section answers the
+underlying question. Relied on `regs`, `period()`, `PERIODS`.
+
+```{python}
+#| label: fig-timing-over-time
+#| fig-cap: "Registration share by day of week, by period (all events)"
+pooled = regs.dropna(subset=["weekday"]).assign(
+    period=lambda d: period(d["starts_on"].dt.year)
+)
+rd = pooled.groupby(["weekday", "period"], observed=True).size().reset_index(name="attendance")
+rd["share"] = rd.groupby("period", observed=True)["attendance"].transform(
+    lambda s: s / s.sum()
+)
+fig = px.line(
+    rd, x="weekday", y="share", color="period",
+    category_orders={"weekday": WEEKDAY_ORDER, "period": PERIODS},
+    color_discrete_sequence=CATEGORICAL, markers=True,
+)
+fig.update_layout(
+    xaxis_title="Day of week", yaxis_title="Share of registrations", legend_title="Period"
+)
+fig.update_yaxes(tickformat=".0%")
+style(fig).show()
+```
+
+## From "How do giving and participation overlap?" — group counts table
+
+Duplicated the chapter's bar chart (`counts` is still computed there).
+
+```{python}
+#| label: tab-overlap-counts
+counts.style.format({"households": "{:,}"})
+```
+
+## From "How do giving and participation overlap?" — giving by distance band among donors
+
+Largely duplicated the donor-geography chapter's table; its one new fact (median gift) was folded
+into that chapter's table instead.
+
+```{python}
+#| label: tab-donor-by-band
+donors = hh[hh["is_donor"]]
+t = donors.groupby("distance_band", observed=True).agg(
+    households=("id", "count"),
+    mean_gift=("total_donations", "mean"),
+    median_gift=("total_donations", "median"),
+    total=("total_donations", "sum"),
+)
+t.style.format(
+    {"households": "{:,}", "mean_gift": money, "median_gift": money, "total": money}
+)
+```

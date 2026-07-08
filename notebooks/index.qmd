@@ -40,6 +40,18 @@ n_patrons = f"{int(households['is_patron'].sum()):,}"
 n_class = f"{int(households['is_class_taker'].sum()):,}"
 n_donor_class = f"{int((households['is_donor'] & households['is_class_taker']).sum()):,}"
 n_all3 = f"{int((households['is_donor'] & households['is_patron'] & households['is_class_taker']).sum()):,}"
+
+from hh.analytics.productions import is_excluded, count_succeeded_attendees
+
+_near = ["[0, 1)", "[1, 5)", "[5, 10)"]
+_cl = regs[regs["event_majorcat"] == "class"].dropna(subset=["distance_band"])
+class_w10 = f"{_cl['distance_band'].isin(_near).mean():.0%}"
+_th = regs[regs["event_minorcat"] == "theater"].dropna(subset=["distance_band"])
+theater_w10 = f"{_th['distance_band'].isin(_near).mean():.0%}"
+_perf = regs[(regs["event_majorcat"] == "performance") & ~regs["event_name"].map(is_excluded)].copy()
+_perf["attendees"] = _perf["tickets"].map(count_succeeded_attendees)
+_don = _perf.merge(households[["id", "is_donor"]], on="id", how="left")
+donor_att_share = f"{_don.loc[_don['is_donor'].fillna(False), 'attendees'].sum() / _don['attendees'].sum():.0%}"
 ```
 
 - **Donors are local.** About **`{python} within10`** of donated dollars come from within 10 miles
@@ -50,6 +62,13 @@ n_all3 = f"{int((households['is_donor'] & households['is_patron'] & households['
   is shifting: since 2021, Sunday has been the best-attended day per performance in nearly every
   full-weekend run. Details are in
   [When people come to Hubbard Hall](02-timing.html).
+- **Classes are local; performances are regional.** `{python} class_w10` of class registrations
+  come from within 10 miles, versus `{python} theater_w10` for theater — and Sunday draws the
+  farthest-traveling theater audience. See
+  [How far do people travel to Hubbard Hall?](03-travel-distance.html).
 - **Strong overlap:** of `{python} n_hh` households, `{python} n_donors` donate,
   `{python} n_patrons` attend performances, and `{python} n_class` take classes;
   `{python} n_donor_class` both donate and take classes, `{python} n_all3` do all three.
+- **Donor households fill most seats:** they account for `{python} donor_att_share` of all
+  performance attendance. See
+  [What performances do donors attend?](05-donor-attendance.html).

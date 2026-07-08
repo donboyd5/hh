@@ -3,18 +3,17 @@ editor_options:
   chunk_output_type: console
 ---
 
-# Donors, patrons, and class-takers
+# How do giving and participation overlap?
 
-How do giving and participation overlap? Each household is flagged `is_donor` (gave a SUCCEEDED
-individual gift), `is_patron` (registered for a performance), and `is_class_taker` (registered for
-a class).
+Each household is flagged `is_donor` (gave a SUCCEEDED individual gift), `is_patron` (registered
+for a performance), and `is_class_taker` (registered for a class).
 
 ```{python}
 #| label: setup-overlap
 import pandas as pd
 import plotly.express as px
 from hh.io import read_parquet
-from hh.viz import style, CATEGORICAL, money
+from hh.viz import style, CATEGORICAL
 
 hh = read_parquet("processed", "households_summary.parquet")
 counts = (
@@ -32,7 +31,6 @@ counts = (
     .reset_index()
     .rename(columns={"index": "group"})
 )
-counts.style.format({"households": "{:,}"})
 ```
 
 ```{python}
@@ -44,18 +42,6 @@ fig.update_traces(hovertemplate="%{y:,.0f}<extra></extra>")
 style(fig).show()
 ```
 
-Do more-engaged households also live closer? Giving by distance band among donor households:
-
-```{python}
-#| label: tab-donor-by-band
-donors = hh[hh["is_donor"]]
-t = donors.groupby("distance_band", observed=True).agg(
-    households=("id", "count"),
-    mean_gift=("total_donations", "mean"),
-    median_gift=("total_donations", "median"),
-    total=("total_donations", "sum"),
-)
-t.style.format(
-    {"households": "{:,}", "mean_gift": money, "median_gift": money, "total": money}
-)
-```
+Which performances the donor households actually attend is in
+[What performances do donors attend?](05-donor-attendance.html); how far donors live from the
+hall is in [Where do donors live?](01-donor-geography.html).

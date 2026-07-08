@@ -3,7 +3,7 @@ editor_options:
   chunk_output_type: console
 ---
 
-# When people come to Hubbard Hall
+# When do people come to Hubbard Hall?
 
 When the *same* production plays Friday, Saturday, **and** Sunday, which day do people pick?
 This chapter leads with that within-run view — the cleanest read on audience day preference,
@@ -351,7 +351,7 @@ Saturday, the weakest day per show — diluted, as in theater, by Saturday matin
 sample is small (a few midweek performances, all in the 2013–2017 festival era), so treat the
 midweek numbers as suggestive rather than precise.
 
-## All events pooled, by day of week
+## Which days are busiest overall?
 
 The coarser view: every event of every kind, whether or not it was part of a run. Counts here
 are **registrations** (a proxy for headcount), and because most events are scheduled on the day
@@ -359,7 +359,8 @@ the organizers chose, this mostly reflects *what gets booked* rather than audien
 use the within-run sections above for that. It is kept for context.
 
 ```{python}
-#| label: tab-cat-weekday
+#| label: fig-weekday-facet
+#| fig-cap: "Registrations by day of week — one panel per programming type"
 cat_order = ["theater", "music", "dance", "opera", "class"]
 named = regs[regs["event_minorcat"].isin(cat_order)].assign(
     cat=lambda d: d["event_minorcat"]
@@ -367,19 +368,6 @@ named = regs[regs["event_minorcat"].isin(cat_order)].assign(
 combo = pd.concat([named, regs[regs["event_majorcat"] == "class"].assign(cat="class")])
 combo = combo.dropna(subset=["weekday"])
 tab = combo.groupby(["cat", "weekday"], observed=True).size().reset_index(name="attendance")
-pivot = (
-    tab.pivot(index="cat", columns="weekday", values="attendance")
-    .reindex(index=[c for c in cat_order if c in set(tab["cat"])])
-    .reindex(columns=WEEKDAY_ORDER)
-    .fillna(0)
-    .astype(int)
-)
-pivot.style.format("{:,}")
-```
-
-```{python}
-#| label: fig-weekday-facet
-#| fig-cap: "Registrations by day of week — one panel per programming type"
 fig = px.bar(
     tab,
     x="weekday",
@@ -397,45 +385,5 @@ style(fig).show()
 **Theater peaks Saturday; music peaks Sunday. Classes spread across the week with a Friday
 peak.**
 
-Has the pooled day mix shifted? Same data as shares within each period (again: this moves when
-the *schedule* moves, not necessarily the audience):
-
-```{python}
-#| label: fig-timing-over-time
-#| fig-cap: "Registration share by day of week, by period (all events)"
-pooled = regs.dropna(subset=["weekday"]).assign(
-    period=lambda d: period(d["starts_on"].dt.year)
-)
-rd = pooled.groupby(["weekday", "period"], observed=True).size().reset_index(name="attendance")
-rd["share"] = rd.groupby("period", observed=True)["attendance"].transform(
-    lambda s: s / s.sum()
-)
-fig = px.line(
-    rd, x="weekday", y="share", color="period",
-    category_orders={"weekday": WEEKDAY_ORDER, "period": PERIODS},
-    color_discrete_sequence=CATEGORICAL, markers=True,
-)
-fig.update_layout(
-    xaxis_title="Day of week", yaxis_title="Share of registrations", legend_title="Period"
-)
-fig.update_yaxes(tickformat=".0%")
-style(fig).show()
-```
-
-Finally, distance rather than volume: for **theater only**, registrations from each distance
-band on each day of the week — "do Friday/Saturday theater audiences travel farther than
-Sunday's?"
-
-```{python}
-#| label: tab-theater-day-band
-theater = regs[regs["event_minorcat"] == "theater"].dropna(subset=["weekday", "distance_band"])
-(
-    theater.groupby(["weekday", "distance_band"], observed=True)
-    .size()
-    .unstack("distance_band")
-    .reindex(WEEKDAY_ORDER)
-    .fillna(0)
-    .astype(int)
-    .style.format("{:,}")
-)
-```
+How far people travel — including whether Friday theater audiences travel farther than
+Sunday's — is in [How far do people travel to Hubbard Hall?](03-travel-distance.html).

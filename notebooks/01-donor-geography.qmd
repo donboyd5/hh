@@ -3,7 +3,7 @@ editor_options:
   chunk_output_type: console
 ---
 
-# Where donors live
+# Where do donors live?
 
 How far do Hubbard Hall's donors live from the hall? Distances are straight-line (haversine) from
 the venue (25 E Main St, Cambridge NY) to each donor household, bucketed into half-open mile bands.
@@ -25,13 +25,14 @@ by_band = (
         households=("id", "count"),
         dollars=("total_donations", "sum"),
         mean_gift=("total_donations", "mean"),
+        median_gift=("total_donations", "median"),
     )
     .reset_index()
 )
 by_band["share"] = by_band["dollars"] / by_band["dollars"].sum()
 by_band["cum_share"] = by_band["dollars"].cumsum() / by_band["dollars"].sum()
 by_band.style.format(
-    {"dollars": money, "mean_gift": money, "share": pct, "cum_share": pct}
+    {"dollars": money, "mean_gift": money, "median_gift": money, "share": pct, "cum_share": pct}
 )
 ```
 
@@ -43,33 +44,6 @@ fig.update_layout(
     showlegend=False,
     xaxis_title="Distance from Hubbard Hall (miles)",
     yaxis_title="Donated $",
-)
-fig.update_yaxes(tickprefix="$", tickformat=",.0f")
-fig.update_traces(hovertemplate="$%{y:,.0f}<extra></extra>")
-style(fig).show()
-```
-
-```{python}
-#| label: fig-households-band
-#| fig-cap: "Donor households by distance band (miles)"
-fig = px.bar(by_band, x="distance_band", y="households", color_discrete_sequence=[BLUE])
-fig.update_layout(
-    showlegend=False,
-    xaxis_title="Distance from Hubbard Hall (miles)",
-    yaxis_title="Donor households",
-)
-fig.update_traces(hovertemplate="%{y:,.0f} households<extra></extra>")
-style(fig).show()
-```
-
-```{python}
-#| label: fig-avg-donation-band
-#| fig-cap: "Average donation per donor household by distance band (miles)"
-fig = px.bar(by_band, x="distance_band", y="mean_gift", color_discrete_sequence=[BLUE])
-fig.update_layout(
-    showlegend=False,
-    xaxis_title="Distance from Hubbard Hall (miles)",
-    yaxis_title="Average donation per household",
 )
 fig.update_yaxes(tickprefix="$", tickformat=",.0f")
 fig.update_traces(hovertemplate="$%{y:,.0f}<extra></extra>")

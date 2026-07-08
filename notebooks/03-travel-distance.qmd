@@ -1,0 +1,109 @@
+---
+editor_options:
+  chunk_output_type: console
+---
+
+# How far do people travel to Hubbard Hall?
+
+The donor-geography chapter asked where the *money* comes from; this one asks where the
+*people* come from. Counts are **registrations** by the registering household's distance band
+(straight-line miles — see [Methodology](99-methodology.html)); registrations without a
+geocodable address (about 2%) are dropped.
+
+```{python}
+#| label: setup-travel
+import pandas as pd
+import plotly.express as px
+from hh.io import read_parquet
+from hh.viz import style, pct
+from hh.analytics.timing import WEEKDAY_ORDER
+
+BANDS = ["[0, 1)", "[1, 5)", "[5, 10)", "[10, 20)", "[20, ∞)"]
+BAND_COLORS = dict(zip(BANDS, ["#b7d3f6", "#6da7ec", "#3987e5", "#184f95", "#0d366b"]))
+
+regs = read_parquet("processed", "registrations_enriched.parquet")
+cat_order = ["theater", "music", "dance", "opera", "class"]
+named = regs[regs["event_minorcat"].isin(cat_order)].assign(
+    cat=lambda d: d["event_minorcat"]
+)
+combo = pd.concat([named, regs[regs["event_majorcat"] == "class"].assign(cat="class")])
+combo = combo.dropna(subset=["distance_band"])
+
+band_cat = (
+    combo.groupby(["cat", "distance_band"], observed=True)
+    .size()
+    .unstack("distance_band")
+    .reindex(index=cat_order, columns=BANDS)
+    .fillna(0)
+    .astype(int)
+)
+w10 = (band_cat[BANDS[:3]].sum(axis=1) / band_cat.sum(axis=1))
+far = band_cat[BANDS[-1]] / band_cat.sum(axis=1)
+```
+
+Registrations by distance band and programming type:
+
+```{python}
+#| label: tab-band-cat
+t = band_cat.copy()
+t["within 10 mi"] = w10
+t.style.format("{:,}", subset=BANDS).format({"within 10 mi": pct})
+```
+
+```{python}
+#| label: fig-band-cat-share
+#| fig-cap: "Where each programming type's registrations come from (share by distance band)"
+share = (
+    band_cat.div(band_cat.sum(axis=1), axis=0)
+    .reset_index()
+    .melt(id_vars="cat", var_name="distance_band", value_name="share")
+)
+fig = px.bar(
+    share, x="cat", y="share", color="distance_band",
+    color_discrete_map=BAND_COLORS,
+    category_orders={"cat": cat_order, "distance_band": BANDS},
+)
+fig.update_layout(
+    xaxis_title="", yaxis_title="Share of registrations", legend_title="Distance band"
+)
+fig.update_yaxes(tickformat=".0%")
+fig.update_traces(hovertemplate="%{y:.0%}<extra>%{fullData.name}</extra>")
+style(fig).show()
+```
+
+**Classes serve the immediate community — `{python} f"{w10['class']:.0%}"` of class
+registrations come from within 10 miles (dance is similar at
+`{python} f"{w10['dance']:.0%}"`). Performances pull from a much wider region: only
+`{python} f"{w10['theater']:.0%}"` of theater, `{python} f"{w10['music']:.0%}"` of music, and
+`{python} f"{w10['opera']:.0%}"` of opera registrations are that local, and roughly a third of
+theater (`{python} f"{far['theater']:.0%}"`) and opera (`{python} f"{far['opera']:.0%}"`)
+registrations come from beyond 20 miles.**
+
+## Do weekend theater audiences travel differently?
+
+For **theater only**, registrations from each distance band on each day of the week — "do
+Friday/Saturday audiences travel farther than Sunday's?"
+
+```{python}
+#| label: tab-theater-day-band
+theater = regs[regs["event_minorcat"] == "theater"].dropna(subset=["weekday", "distance_band"])
+day_band = (
+    theater.groupby(["weekday", "distance_band"], observed=True)
+    .size()
+    .unstack("distance_band")
+    .reindex(index=WEEKDAY_ORDER, columns=BANDS)
+    .fillna(0)
+    .astype(int)
+)
+far_day = (day_band[BANDS[-1]] / day_band.sum(axis=1))
+t = day_band.copy()
+t["beyond 20 mi"] = far_day
+t.style.format("{:,}", subset=BANDS).format({"beyond 20 mi": pct})
+```
+
+**Sunday draws the farthest-traveling theater audience: `{python} f"{far_day['Sunday']:.0%}"`
+of Sunday registrations come from beyond 20 miles, versus `{python} f"{far_day['Friday']:.0%}"`
+on Friday and `{python} f"{far_day['Saturday']:.0%}"` on Saturday. Friday is the most local
+night. That fits the within-run finding in
+[When do people come to Hubbard Hall?](02-timing.html): the Sunday matinee is not a
+neighborhood habit — it is when out-of-area visitors come.**

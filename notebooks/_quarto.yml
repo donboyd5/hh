@@ -10,7 +10,9 @@ book:
     - index.qmd
     - 01-donor-geography.qmd
     - 02-timing.qmd
-    - 03-overlap.qmd
+    - 03-travel-distance.qmd
+    - 04-overlap.qmd
+    - 05-donor-attendance.qmd
   appendices:
     - 99-methodology.qmd
 

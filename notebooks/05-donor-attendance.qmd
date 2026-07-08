@@ -1,0 +1,122 @@
+---
+editor_options:
+  chunk_output_type: console
+---
+
+# What performances do donors attend?
+
+The overlap chapter showed that most donor households also attend; this one asks what they
+attend. Each registration is tagged with whether the registering household has ever given a
+SUCCEEDED individual gift ("donor household"). Performance attendance is **headcount**
+(succeeded ticket attendees — see [Methodology](99-methodology.html)), attributed to the
+registering household; canceled, moved, and rehearsal events are excluded.
+
+```{python}
+#| label: setup-donor-att
+import pandas as pd
+import plotly.express as px
+from hh.io import read_parquet
+from hh.viz import style, BLUE, pct
+from hh.analytics.productions import match_production, is_excluded, count_succeeded_attendees
+
+regs = read_parquet("processed", "registrations_enriched.parquet")
+hh = read_parquet("processed", "households_summary.parquet")
+
+m = regs.merge(hh[["id", "is_donor"]], on="id", how="left")
+m["is_donor"] = m["is_donor"].fillna(False)
+perf = m[(m["event_majorcat"] == "performance") & ~m["event_name"].map(is_excluded)].copy()
+perf["attendees"] = perf["tickets"].map(count_succeeded_attendees)
+
+by_cat = perf.groupby("event_minorcat").apply(
+    lambda d: pd.Series(
+        {
+            "attendees": d["attendees"].sum(),
+            "donor attendees": d.loc[d["is_donor"], "attendees"].sum(),
+        }
+    ),
+    include_groups=False,
+).astype(int)
+by_cat["donor share"] = by_cat["donor attendees"] / by_cat["attendees"]
+by_cat = by_cat.reindex(["theater", "music", "opera", "dance", "other"]).dropna()
+overall_share = perf.loc[perf["is_donor"], "attendees"].sum() / perf["attendees"].sum()
+```
+
+Donor households account for **`{python} f"{overall_share:.0%}"` of all performance
+attendance**. By genre:
+
+```{python}
+#| label: fig-donor-share-cat
+#| fig-cap: "Share of performance attendance from donor households, by genre"
+fig = px.bar(
+    by_cat.reset_index(),
+    x="event_minorcat",
+    y="donor share",
+    color_discrete_sequence=[BLUE],
+    custom_data=["donor attendees", "attendees"],
+)
+fig.update_layout(showlegend=False, xaxis_title="", yaxis_title="Attendance from donor households")
+fig.update_yaxes(tickformat=".0%", range=[0, 1])
+fig.update_traces(
+    hovertemplate="%{y:.0%} (%{customdata[0]:,} of %{customdata[1]:,} attendees)<extra></extra>"
+)
+style(fig).show()
+```
+
+```{python}
+#| label: tab-donor-share-cat
+by_cat.style.format({"attendees": "{:,}", "donor attendees": "{:,}", "donor share": pct})
+```
+
+**Donor households are the majority of every genre's audience — highest for music
+(`{python} f"{by_cat.loc['music', 'donor share']:.0%}"`), lowest for dance
+(`{python} f"{by_cat.loc['dance', 'donor share']:.0%}"`), with theater at
+`{python} f"{by_cat.loc['theater', 'donor share']:.0%}"`.** Selling tickets and cultivating
+donors are not separate audiences at Hubbard Hall.
+
+## Which offerings drew the most donor attendance?
+
+Attendance from donor households by offering — production titles where the run mapping applies
+(recurring titles such as Winter Carnival aggregate across their annual runs), otherwise the
+event's own name:
+
+```{python}
+#| label: tab-top-donor-offerings
+perf["offering"] = perf["event_name"].map(lambda n: match_production(n) or n)
+g = perf.groupby("offering").agg(
+    genre=("event_minorcat", "first"),
+    first_year=("starts_on", lambda s: int(s.dt.year.min())),
+    attendees=("attendees", "sum"),
+)
+g["donor attendees"] = perf[perf["is_donor"]].groupby("offering")["attendees"].sum()
+g["donor attendees"] = g["donor attendees"].fillna(0).astype(int)
+g["donor share"] = g["donor attendees"] / g["attendees"]
+top = g.sort_values("donor attendees", ascending=False).head(15)
+top.index.name = None
+top.style.format(
+    {"attendees": "{:,}", "donor attendees": "{:,}", "donor share": pct}
+)
+```
+
+The list is led by the big ensemble musicals and the summer operas — the same shows that fill
+the house generally — plus Winter Carnival of New Work, whose audience is the most
+donor-heavy of any large offering.
+
+Do donor and non-donor households split their activity differently? Registration mix (all event
+types, registrations rather than headcount):
+
+```{python}
+#| label: tab-donor-mix
+mix = (
+    m.groupby([m["is_donor"].map({True: "Donor households", False: "Non-donor households"}),
+               "event_majorcat"], observed=True)
+    .size()
+    .unstack("event_majorcat")
+    .fillna(0)
+)
+mix = mix.div(mix.sum(axis=1), axis=0)
+mix.index.name = None
+mix.style.format("{:.0%}")
+```
+
+Non-donor households skew toward classes; donor households split more evenly between classes
+and performances.
