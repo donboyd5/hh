@@ -100,9 +100,9 @@ people), and canceled or moved performances, open rehearsals, online productions
 ```{python}
 #| label: setup-runs
 from hh.viz import CATEGORICAL
-from hh.analytics.productions import theater_performances, full_weekend_runs, time_slot
+from hh.analytics.productions import production_performances, full_weekend_runs, time_slot
 
-perf = theater_performances(regs)
+perf = production_performances(regs, minorcats=("theater",))
 fw = full_weekend_runs(perf)
 
 day_order = [d for d in WEEKDAY_ORDER if d in set(fw["weekday"])]
@@ -239,6 +239,80 @@ Saturday matinees — the weakest slot of the weekend. Sunday's single 2 pm show
 (`{python} per_perf['Sunday']` per show) draws as well as any slot, so the matinee habit is a
 Sunday habit, not a Saturday one.**
 
+### Do opera and music runs behave the same way?
+
+Music and opera get the same treatment: map event names to productions, keep runs that played
+all of Friday, Saturday, and Sunday. Almost all music events are one-off concerts (Music from
+Salem plays single afternoons, cabarets play one or two nights), so nearly everything that
+qualifies is opera — the summer festival stagings of 2013–2017, which also played real midweek
+(Wednesday/Thursday) performances — plus one 2015 musical folktale with a theater-style
+four-weekend run.
+
+```{python}
+#| label: setup-mo-runs
+mo_fw = full_weekend_runs(production_performances(regs, minorcats=("music", "opera")))
+
+mo_day_order = [d for d in WEEKDAY_ORDER if d in set(mo_fw["weekday"])]
+mo_day = (
+    mo_fw.groupby("weekday")
+    .agg(performances=("swept_event_id", "count"), attendees=("attendees", "sum"))
+    .reindex(mo_day_order)
+)
+mo_day["attendees per performance"] = mo_day["attendees"] / mo_day["performances"]
+mo_day["share of attendees"] = mo_day["attendees"] / mo_day["attendees"].sum()
+mo_rate = {d: f"{mo_day.loc[d, 'attendees per performance']:.0f}" for d in mo_day_order}
+n_mo_runs = mo_fw["production_run"].nunique()
+```
+
+The `{python} f"{n_mo_runs}"` qualifying runs, chronologically:
+
+```{python}
+#| label: tab-mo-run-detail
+mo_by_day = mo_fw.pivot_table(
+    index="production_run",
+    columns="weekday",
+    values="attendees",
+    aggfunc="sum",
+    fill_value=0,
+).reindex(columns=mo_day_order)
+mo_by_day["Total"] = mo_by_day.sum(axis=1)
+mo_meta = mo_fw.groupby("production_run").agg(
+    first=("starts_on", "min"), last=("starts_on", "max"), performances=("swept_event_id", "count")
+)
+mo_order = mo_meta["first"].sort_values().index.tolist()
+mo_detail = mo_meta.join(mo_by_day).reindex(mo_order)
+mo_detail["first"] = mo_detail["first"].dt.strftime("%b %d, %Y")
+mo_detail["last"] = mo_detail["last"].dt.strftime("%b %d, %Y")
+mo_detail.index.name = None
+mo_detail = mo_detail.rename(columns={"first": "First", "last": "Last", "performances": "Perfs"})
+mo_detail.style.format(
+    "{:,}", subset=[c for c in mo_detail.columns if c not in ("First", "Last")]
+)
+```
+
+And by day of week:
+
+```{python}
+#| label: tab-mo-run-day
+mo_day.style.format(
+    {
+        "performances": "{:,}",
+        "attendees": "{:,}",
+        "attendees per performance": "{:.1f}",
+        "share of attendees": "{:.1%}",
+    }
+)
+```
+
+**Opera audiences didn't privilege the weekend: the midweek opera nights drew the most people
+per performance (Thursday `{python} mo_rate.get('Thursday', '—')`, versus
+`{python} mo_rate.get('Friday', '—')` on Friday and `{python} mo_rate.get('Saturday', '—')` on
+Saturday, the weakest day per show — diluted, as in theater, by Saturday matinees).** The
+sample is small (a few midweek performances, all in the 2013–2017 festival era), so treat the
+midweek numbers as suggestive rather than precise.
+
 The per-performance numbers above pool 2013–2026, but the day ranking has not been stable —
 Sunday has become the strongest day in recent years. That story is in
-[How things changed over time](04-trends.html).
+[How things changed over time](04-trends.html). (That trend analysis is theater-only: the
+qualifying opera and music runs all fall in 2013–2017, too narrow a window for an over-time
+comparison.)

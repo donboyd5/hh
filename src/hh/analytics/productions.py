@@ -1,4 +1,4 @@
-"""Map theater performance events to productions and analyze day-of-run attendance.
+"""Map performance events to productions and analyze day-of-run attendance.
 
 Each Neon event is a single performance (one title + date + time). This module groups those
 events into productions via a manually curated title-pattern list, splits a title's
@@ -6,8 +6,14 @@ performances into runs (a new run starts after a gap of more than RUN_GAP_DAYS),
 true headcount: ticket attendees with registrationStatus SUCCEEDED (a registration averages
 about two attendees, so registration counts understate headcount).
 
+Coverage differs by category: the theater pattern list is exhaustive (every theater event
+matches a pattern or an exclusion), while music/opera patterns cover only the titles that had
+multiple performances — one-off concerts are left unmatched and dropped, since they cannot form
+a multi-day run. Use ``unmatched_events`` to audit what a category drops.
+
 Events that were not real public performances are excluded before mapping: canceled or moved
-dates, test events, open rehearsals, online productions, and weekday 10am school shows.
+dates, test events, open/dress/pay-what-you-will rehearsals, online productions, and weekday
+10am school shows.
 """
 from __future__ import annotations
 
@@ -26,6 +32,9 @@ EXCLUDE_PATTERNS = [
     r"Online Production",
     r"Open Rehearsal",
     r"at 10am",  # weekday school-time shows (Edwin Drood)
+    r"Dress Rehearsal",  # opera dress-rehearsal performances
+    r"PWYW",  # pay-what-you-will rehearsal nights
+    r"A Day at the Opera",  # day-long special event, not a performance
 ]
 
 # Manually curated: every theater performance event name matches exactly one production title.
@@ -83,6 +92,28 @@ PRODUCTION_PATTERNS = [
     (r"Eurydice", "Eurydice"),
     (r"Fefu and Her Friends", "Fefu and Her Friends"),
     (r"Sunday in The Park with George", "Sunday in the Park with George"),
+    # Opera (Hubbard Hall Opera Theater summer festivals and other staged opera).
+    (r"Barber of Seville", "The Barber of Seville (opera)"),
+    (r"Trial by Jury", "Trial by Jury (opera)"),
+    (r"Marriage of Figaro", "The Marriage of Figaro (opera)"),
+    (r"Gianni Schicchi", "Gianni Schicchi (opera)"),
+    (r"Bizet's Carmen", "Carmen (opera, concert)"),
+    (r"Purely Puccini", "Purely Puccini (opera)"),
+    (r"Rigoletto", "Rigoletto (opera)"),
+    (r"Old Maid and the Thief", "The Old Maid and the Thief (opera)"),
+    (r"Madama Butterfly", "Madama Butterfly (opera)"),
+    (r"La Pizza con Funghi", "La Pizza con Funghi (opera)"),
+    (r"Elixir of Love", "The Elixir of Love (opera)"),
+    (r"Falling and [Tt]he Rising", "The Falling and the Rising (opera)"),
+    # Music titles with multiple performances (one-off concerts are intentionally unmatched).
+    (r"Wayward Home", "Wayward Home - A Musical Folktale"),
+    (r"Holly Jolly Holiday Cabaret", "A Holly Jolly Holiday Cabaret"),
+    (r"Songs from High School Musical", "Cabaret: Songs from High School Musical"),
+    (r"The Red Guitar", "John Sheldon's The Red Guitar"),
+    (r"Autumn Gold", "Autumn Gold Cabaret"),
+    (r"Spring Sing", "Youth Chorale Spring Sing"),
+    (r"Moonlit Melodies", "Moonlit Melodies Cabaret"),
+    (r"Music of Cole Porter", "HOT! The Music of Cole Porter (Seagle)"),
 ]
 
 
@@ -131,22 +162,34 @@ def count_succeeded_attendees(tickets) -> int:
     return n
 
 
-def theater_performances(regs: pd.DataFrame) -> pd.DataFrame:
-    """One row per theater performance: production, run label, date, weekday, attendees.
+def unmatched_events(regs: pd.DataFrame, minorcats: tuple[str, ...]) -> list[str]:
+    """Event names in the given categories that are neither excluded nor mapped (thus dropped)."""
+    d = regs[
+        (regs["event_majorcat"] == "performance") & (regs["event_minorcat"].isin(minorcats))
+    ]
+    names = d["event_name"].drop_duplicates()
+    return sorted(n for n in names if not is_excluded(n) and match_production(n) is None)
+
+
+def production_performances(
+    regs: pd.DataFrame, minorcats: tuple[str, ...] = ("theater",)
+) -> pd.DataFrame:
+    """One row per performance: production, run label, date, weekday, attendees.
 
     Input is the enriched registrations table; output aggregates registrations to the
-    performance (event) level, drops excluded events, and labels each performance with its
-    production run ("<title> (<year of run's first performance>)").
+    performance (event) level, drops excluded and unmatched events, and labels each performance
+    with its production run ("<title> (<year of run's first performance>)").
     """
-    theater = regs[
-        (regs["event_majorcat"] == "performance") & (regs["event_minorcat"] == "theater")
+    d = regs[
+        (regs["event_majorcat"] == "performance") & (regs["event_minorcat"].isin(minorcats))
     ].copy()
-    theater = theater[~theater["event_name"].map(is_excluded)]
-    theater["production"] = theater["event_name"].map(match_production)
-    theater["attendees"] = theater["tickets"].map(count_succeeded_attendees)
+    d = d[~d["event_name"].map(is_excluded)]
+    d["production"] = d["event_name"].map(match_production)
+    d = d.dropna(subset=["production"])
+    d["attendees"] = d["tickets"].map(count_succeeded_attendees)
 
     perf = (
-        theater.groupby(["production", "swept_event_id", "event_name", "starts_on"], dropna=False)
+        d.groupby(["production", "swept_event_id", "event_name", "starts_on"])
         .agg(attendees=("attendees", "sum"), registrations=("registration_id", "count"))
         .reset_index()
         .sort_values(["production", "starts_on"])

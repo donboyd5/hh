@@ -127,7 +127,7 @@ def test_theater_productions_mapping_and_runs():
         full_weekend_runs,
         is_excluded,
         match_production,
-        theater_performances,
+        production_performances,
         time_slot,
     )
 
@@ -170,7 +170,7 @@ def test_theater_productions_mapping_and_runs():
             reg("r6", "e1", "Fun Home - Friday, February 3 at 7:30 pm", "2023-02-03"),
         ]
     )
-    perf = theater_performances(regs)
+    perf = production_performances(regs)
     assert set(perf["production_run"]) == {
         "Fun Home (2023)",
         "Whispering Bones (2018)",
@@ -181,3 +181,44 @@ def test_theater_productions_mapping_and_runs():
 
     fw = full_weekend_runs(perf)
     assert set(fw["production_run"]) == {"Fun Home (2023)"}
+
+
+def test_opera_music_mapping():
+    from hh.analytics.productions import (
+        is_excluded,
+        match_production,
+        production_performances,
+        unmatched_events,
+    )
+
+    assert match_production("Opera: Rigoletto - August 14 at 8pm") == "Rigoletto (opera)"
+    assert match_production("Wayward Home - A Musical Folktale (Sat 2pm)") == (
+        "Wayward Home - A Musical Folktale"
+    )
+    # one-off concerts are intentionally unmatched
+    assert match_production("Music from Salem Concert: Baroque") is None
+    # rehearsal-type opera events are excluded
+    assert is_excluded("Opera: Rigoletto - August 12 at 8pm PWYW REHEARSAL")
+    assert is_excluded("Opera: Dress Rehearsal Performance, Marriage of Figaro")
+    assert is_excluded("Special Event: A Day at the Opera, August 15")
+
+    def reg(rid, eid, name, cat, date):
+        return {
+            "registration_id": rid,
+            "swept_event_id": eid,
+            "event_name": name,
+            "starts_on": pd.Timestamp(date),
+            "event_majorcat": "performance",
+            "event_minorcat": cat,
+            "tickets": [{"attendees": [{"registrationStatus": "SUCCEEDED"}]}],
+        }
+
+    regs = pd.DataFrame(
+        [
+            reg("r1", "e1", "Opera: Rigoletto - August 14 at 8pm", "opera", "2015-08-14"),
+            reg("r2", "e2", "Music from Salem Concert: Baroque", "music", "2014-01-04"),
+        ]
+    )
+    perf = production_performances(regs, minorcats=("music", "opera"))
+    assert set(perf["production_run"]) == {"Rigoletto (opera) (2015)"}
+    assert unmatched_events(regs, ("music", "opera")) == ["Music from Salem Concert: Baroque"]

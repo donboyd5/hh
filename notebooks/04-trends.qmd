@@ -93,9 +93,11 @@ two shows don't get double credit. Headcount is ticket attendees whose registrat
 
 ```{python}
 #| label: setup-run-trends
-from hh.analytics.productions import theater_performances, full_weekend_runs
+from hh.analytics.productions import production_performances, full_weekend_runs
 
-fw = full_weekend_runs(theater_performances(read_parquet("processed", "registrations_enriched.parquet")))
+fw = full_weekend_runs(
+    production_performances(read_parquet("processed", "registrations_enriched.parquet"))
+)
 wk = fw[fw["weekday"].isin(["Friday", "Saturday", "Sunday"])].copy()
 DAY_COLORS = {"Friday": CATEGORICAL[0], "Saturday": CATEGORICAL[1], "Sunday": CATEGORICAL[2]}
 
