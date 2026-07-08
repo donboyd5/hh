@@ -155,19 +155,31 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
         <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="./01-donor-geography.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text"><span class="chapter-number">2</span>&nbsp; <span class="chapter-title">Where donors live</span></span></a>
+ <span class="menu-text"><span class="chapter-number">2</span>&nbsp; <span class="chapter-title">Where do donors live?</span></span></a>
   </div>
 </li>
         <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="./02-timing.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text"><span class="chapter-number">3</span>&nbsp; <span class="chapter-title">When people come to Hubbard Hall</span></span></a>
+ <span class="menu-text"><span class="chapter-number">3</span>&nbsp; <span class="chapter-title">When do people come to Hubbard Hall?</span></span></a>
   </div>
 </li>
         <li class="sidebar-item">
   <div class="sidebar-item-container"> 
-  <a href="./03-overlap.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text"><span class="chapter-number">4</span>&nbsp; <span class="chapter-title">Donors, patrons, and class-takers</span></span></a>
+  <a href="./03-travel-distance.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">4</span>&nbsp; <span class="chapter-title">How far do people travel to Hubbard Hall?</span></span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="./04-overlap.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">5</span>&nbsp; <span class="chapter-title">How do giving and participation overlap?</span></span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="./05-donor-attendance.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">6</span>&nbsp; <span class="chapter-title">What performances do donors attend?</span></span></a>
   </div>
 </li>
         <li class="sidebar-item sidebar-item-section">
@@ -268,13 +280,27 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a>n_patrons <span class="op">=</span> <span class="ss">f"</span><span class="sc">{</span><span class="bu">int</span>(households[<span class="st">'is_patron'</span>].<span class="bu">sum</span>())<span class="sc">:,}</span><span class="ss">"</span></span>
 <span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a>n_class <span class="op">=</span> <span class="ss">f"</span><span class="sc">{</span><span class="bu">int</span>(households[<span class="st">'is_class_taker'</span>].<span class="bu">sum</span>())<span class="sc">:,}</span><span class="ss">"</span></span>
 <span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a>n_donor_class <span class="op">=</span> <span class="ss">f"</span><span class="sc">{</span><span class="bu">int</span>((households[<span class="st">'is_donor'</span>] <span class="op">&amp;</span> households[<span class="st">'is_class_taker'</span>]).<span class="bu">sum</span>())<span class="sc">:,}</span><span class="ss">"</span></span>
-<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a>n_all3 <span class="op">=</span> <span class="ss">f"</span><span class="sc">{</span><span class="bu">int</span>((households[<span class="st">'is_donor'</span>] <span class="op">&amp;</span> households[<span class="st">'is_patron'</span>] <span class="op">&amp;</span> households[<span class="st">'is_class_taker'</span>]).<span class="bu">sum</span>())<span class="sc">:,}</span><span class="ss">"</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a>n_all3 <span class="op">=</span> <span class="ss">f"</span><span class="sc">{</span><span class="bu">int</span>((households[<span class="st">'is_donor'</span>] <span class="op">&amp;</span> households[<span class="st">'is_patron'</span>] <span class="op">&amp;</span> households[<span class="st">'is_class_taker'</span>]).<span class="bu">sum</span>())<span class="sc">:,}</span><span class="ss">"</span></span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> hh.analytics.productions <span class="im">import</span> is_excluded, count_succeeded_attendees</span>
+<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a>_near <span class="op">=</span> [<span class="st">"[0, 1)"</span>, <span class="st">"[1, 5)"</span>, <span class="st">"[5, 10)"</span>]</span>
+<span id="cb1-32"><a href="#cb1-32" aria-hidden="true" tabindex="-1"></a>_cl <span class="op">=</span> regs[regs[<span class="st">"event_majorcat"</span>] <span class="op">==</span> <span class="st">"class"</span>].dropna(subset<span class="op">=</span>[<span class="st">"distance_band"</span>])</span>
+<span id="cb1-33"><a href="#cb1-33" aria-hidden="true" tabindex="-1"></a>class_w10 <span class="op">=</span> <span class="ss">f"</span><span class="sc">{</span>_cl[<span class="st">'distance_band'</span>]<span class="sc">.</span>isin(_near)<span class="sc">.</span>mean()<span class="sc">:.0%}</span><span class="ss">"</span></span>
+<span id="cb1-34"><a href="#cb1-34" aria-hidden="true" tabindex="-1"></a>_th <span class="op">=</span> regs[regs[<span class="st">"event_minorcat"</span>] <span class="op">==</span> <span class="st">"theater"</span>].dropna(subset<span class="op">=</span>[<span class="st">"distance_band"</span>])</span>
+<span id="cb1-35"><a href="#cb1-35" aria-hidden="true" tabindex="-1"></a>theater_w10 <span class="op">=</span> <span class="ss">f"</span><span class="sc">{</span>_th[<span class="st">'distance_band'</span>]<span class="sc">.</span>isin(_near)<span class="sc">.</span>mean()<span class="sc">:.0%}</span><span class="ss">"</span></span>
+<span id="cb1-36"><a href="#cb1-36" aria-hidden="true" tabindex="-1"></a>_perf <span class="op">=</span> regs[(regs[<span class="st">"event_majorcat"</span>] <span class="op">==</span> <span class="st">"performance"</span>) <span class="op">&amp;</span> <span class="op">~</span>regs[<span class="st">"event_name"</span>].<span class="bu">map</span>(is_excluded)].copy()</span>
+<span id="cb1-37"><a href="#cb1-37" aria-hidden="true" tabindex="-1"></a>_perf[<span class="st">"attendees"</span>] <span class="op">=</span> _perf[<span class="st">"tickets"</span>].<span class="bu">map</span>(count_succeeded_attendees)</span>
+<span id="cb1-38"><a href="#cb1-38" aria-hidden="true" tabindex="-1"></a>_don <span class="op">=</span> _perf.merge(households[[<span class="st">"id"</span>, <span class="st">"is_donor"</span>]], on<span class="op">=</span><span class="st">"id"</span>, how<span class="op">=</span><span class="st">"left"</span>)</span>
+<span id="cb1-39"><a href="#cb1-39" aria-hidden="true" tabindex="-1"></a>donor_att_share <span class="op">=</span> <span class="ss">f"</span><span class="sc">{</span>_don<span class="sc">.</span>loc[_don[<span class="st">'is_donor'</span>].fillna(<span class="va">False</span>), <span class="st">'attendees'</span>]<span class="sc">.</span><span class="bu">sum</span>() <span class="op">/</span> _don[<span class="st">'attendees'</span>]<span class="sc">.</span><span class="bu">sum</span>()<span class="sc">:.0%}</span><span class="ss">"</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 </div>
 <ul>
 <li><strong>Donors are local.</strong> About <strong>54%</strong> of donated dollars come from within 10 miles of Hubbard Hall (41% within 5 miles; 77% within 20 miles).</li>
 <li><strong>Theater draws on Saturday; music on Sunday.</strong> But within a theater run that plays Fri/Sat/Sun, Saturday leads only because it usually has two shows — per performance the three days are essentially tied, and Saturday matinees are the weekend’s weakest slot. The ranking is shifting: since 2021, Sunday has been the best-attended day per performance in nearly every full-weekend run. Details are in <a href="02-timing.html">When people come to Hubbard Hall</a>.</li>
+<li><strong>Classes are local; performances are regional.</strong> 76% of class registrations come from within 10 miles, versus 54% for theater — and Sunday draws the farthest-traveling theater audience. See <a href="03-travel-distance.html">How far do people travel to Hubbard Hall?</a>.</li>
 <li><strong>Strong overlap:</strong> of 4,598 households, 1,298 donate, 2,745 attend performances, and 1,819 take classes; 629 both donate and take classes, 418 do all three.</li>
+<li><strong>Donor households fill most seats:</strong> they account for 68% of all performance attendance. See <a href="05-donor-attendance.html">What performances do donors attend?</a>.</li>
 </ul>
 
 
@@ -685,8 +711,8 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   <div class="nav-page nav-page-previous">
   </div>
   <div class="nav-page nav-page-next">
-      <a href="./01-donor-geography.html" class="pagination-link" aria-label="Where donors live">
-        <span class="nav-page-text"><span class="chapter-number">2</span>&nbsp; <span class="chapter-title">Where donors live</span></span> <i class="bi bi-arrow-right-short"></i>
+      <a href="./01-donor-geography.html" class="pagination-link" aria-label="Where do donors live?">
+        <span class="nav-page-text"><span class="chapter-number">2</span>&nbsp; <span class="chapter-title">Where do donors live?</span></span> <i class="bi bi-arrow-right-short"></i>
       </a>
   </div>
 </nav>
