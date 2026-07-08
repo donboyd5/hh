@@ -38,7 +38,10 @@ uv run python scripts/pull.py            # Neon API -> data/00_raw (everything s
 uv run python scripts/geocode.py         # geocode addresses + distance bands (cached, ~5 min first time)
 uv run python scripts/build.py           # clean -> enrich -> summarize -> data/20_processed
 quarto render notebooks                  # build the web book -> notebooks/_web/
+quarto publish gh-pages notebooks --no-prompt --no-render   # push the rendered book to GitHub Pages
 ```
+
+The book is published at <https://donboyd5.github.io/hh/> (GitHub Pages, `gh-pages` branch).
 
 `pull.py` (accounts/donations/events + reference) and `sweep_registrations.py` (the per-event
 registrations sweep) are separate because the sweep is long; run both for a full refresh.
