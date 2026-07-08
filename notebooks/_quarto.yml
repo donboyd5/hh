@@ -3,7 +3,7 @@ project:
   output-dir: _web
 
 book:
-  title: "Hubbard Hall — constituent analysis"
+  title: "Hubbard Hall — stakeholder analysis"
   author: "Don Boyd"
   date: today
   chapters:
@@ -11,7 +11,8 @@ book:
     - 01-donor-geography.qmd
     - 02-timing.qmd
     - 03-overlap.qmd
-    - 04-trends.qmd
+  appendices:
+    - 99-methodology.qmd
 
 format:
   html:

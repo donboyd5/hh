@@ -3,105 +3,31 @@ editor_options:
   chunk_output_type: console
 ---
 
-# When people come
+# When people come to Hubbard Hall
 
-Which days of the week draw the most attendance? Counts below are **registrations** (a proxy for
-headcount), grouped by the event's performance date. Each panel is one kind of programming.
+When the *same* production plays Friday, Saturday, **and** Sunday, which day do people pick?
+This chapter leads with that within-run view — the cleanest read on audience day preference,
+since it holds the show constant — then asks how the answer has changed over time, whether opera
+and music runs behave the same way, and closes with the coarser all-events view. How runs are
+reconstructed from Neon events, what is excluded, and how headcount is counted are in the
+[Methodology](99-methodology.html) appendix.
 
-```{python}
-#| label: setup-time
-import pandas as pd
-import plotly.express as px
-from hh.io import read_parquet
-from hh.viz import style, BLUE
-from hh.analytics.timing import WEEKDAY_ORDER
+## Within a theater run: Friday, Saturday, or Sunday?
 
-regs = read_parquet("processed", "registrations_enriched.parquet")
-cat_order = ["theater", "music", "dance", "opera", "class"]
-
-named = regs[regs["event_minorcat"].isin(cat_order)].assign(
-    cat=lambda d: d["event_minorcat"]
-)
-combo = pd.concat([named, regs[regs["event_majorcat"] == "class"].assign(cat="class")])
-combo = combo.dropna(subset=["weekday"])
-tab = combo.groupby(["cat", "weekday"], observed=True).size().reset_index(name="attendance")
-```
-
-```{python}
-#| label: fig-weekday-facet
-#| fig-cap: "Attendance by day of week — one panel per programming type"
-fig = px.bar(
-    tab,
-    x="weekday",
-    y="attendance",
-    facet_col="cat",
-    category_orders={"cat": cat_order, "weekday": WEEKDAY_ORDER},
-    color_discrete_sequence=[BLUE],
-)
-fig.update_layout(yaxis_title="Registrations")
-fig.for_each_xaxis(lambda a: a.update(title=""))
-fig.update_traces(hovertemplate="%{y:,.0f}<extra></extra>")
-style(fig).show()
-```
-
-The same data as a table — each programming type (rows) by day of week (columns), sorted by type
-then day:
-
-```{python}
-#| label: tab-cat-weekday
-pivot = (
-    tab.pivot(index="cat", columns="weekday", values="attendance")
-    .reindex(index=[c for c in cat_order if c in set(tab["cat"])])
-    .reindex(columns=WEEKDAY_ORDER)
-    .fillna(0)
-    .astype(int)
-)
-pivot.style.format("{:,}")
-```
-
-**Theater peaks Saturday; music peaks Sunday. Classes spread across the week with a Friday peak.**
-
-The next table is about *distance*, not volume: for **theater only**, it shows how many attendees
-came from each distance band on each day of the week (rows = day, columns = distance band). It
-answers questions like "do Friday/Saturday theater audiences travel farther than Sunday's?"
-
-```{python}
-#| label: tab-theater-day-band
-theater = regs[regs["event_minorcat"] == "theater"].dropna(subset=["weekday", "distance_band"])
-(
-    theater.groupby(["weekday", "distance_band"], observed=True)
-    .size()
-    .unstack("distance_band")
-    .reindex(WEEKDAY_ORDER)
-    .fillna(0)
-    .astype(int)
-    .style.format("{:,}")
-)
-```
-
-## Within a run: Friday, Saturday, or Sunday?
-
-The panels above pool every theater event, including one-night shows, so a "Saturday peak" could
-just mean more shows are booked on Saturdays. A sharper version of the question: when the *same*
-production plays Friday, Saturday, **and** Sunday, which day do people pick?
-
-Neon stores each performance as a separate event (e.g. "Fun Home - Friday, February 3 at
-7:30 pm") with no field linking the nights of a run, so event names were manually mapped to
-productions (`hh.analytics.productions`), and a production's performances are split into
-separate runs when more than 45 days apart. This section keeps only production runs that played
-**all three** of Friday, Saturday, and Sunday — mostly mainstage shows running one to four
-weekends.
-
-Two other differences from the counts above: attendance here is true **headcount** (ticket
-attendees whose registration succeeded, not registrations — one registration averages about two
-people), and canceled or moved performances, open rehearsals, online productions, and weekday
-10 am school shows are excluded.
+Only theater production runs that played **all three** of Friday, Saturday, and Sunday — mostly
+mainstage shows running one to four weekends. Attendance is true **headcount**, not
+registrations.
 
 ```{python}
 #| label: setup-runs
-from hh.viz import CATEGORICAL
+import pandas as pd
+import plotly.express as px
+from hh.io import read_parquet
+from hh.viz import style, BLUE, CATEGORICAL
+from hh.analytics.timing import WEEKDAY_ORDER
 from hh.analytics.productions import production_performances, full_weekend_runs, time_slot
 
+regs = read_parquet("processed", "registrations_enriched.parquet")
 perf = production_performances(regs, minorcats=("theater",))
 fw = full_weekend_runs(perf)
 
@@ -159,6 +85,7 @@ run_day["share"] = run_day["attendees"] / run_day.groupby("production_run")[
 order = fw.groupby("production_run")["starts_on"].min().sort_values().index.tolist()
 run_totals = wk.groupby("production_run")["attendees"].sum()
 charted = [r for r in order if run_totals[r] >= 30]
+DAY_COLORS = {"Friday": CATEGORICAL[0], "Saturday": CATEGORICAL[1], "Sunday": CATEGORICAL[2]}
 
 fig = px.bar(
     run_day[run_day["production_run"].isin(charted)],
@@ -170,11 +97,7 @@ fig = px.bar(
         "production_run": charted[::-1],
         "weekday": ["Friday", "Saturday", "Sunday"],
     },
-    color_discrete_map={
-        "Friday": CATEGORICAL[0],
-        "Saturday": CATEGORICAL[1],
-        "Sunday": CATEGORICAL[2],
-    },
+    color_discrete_map=DAY_COLORS,
     custom_data=["attendees"],
 )
 fig.update_traces(
@@ -239,14 +162,131 @@ Saturday matinees — the weakest slot of the weekend. Sunday's single 2 pm show
 (`{python} per_perf['Sunday']` per show) draws as well as any slot, so the matinee habit is a
 Sunday habit, not a Saturday one.**
 
-### Do opera and music runs behave the same way?
+## Has the best day changed over time?
+
+The numbers above pool 2013–2026, but the day ranking has not been stable. Still holding the
+product constant (full-weekend theater runs, attendees per performance so days with two shows
+don't get double credit), here is the same question across roughly five-year periods.
+
+```{python}
+#| label: setup-run-trends
+PERIODS = ["2013–2015", "2016–2020", "2021–2026"]
+
+def period(year):
+    return pd.cut(year, bins=[2010, 2015, 2020, 2026], labels=PERIODS)
+
+run_rate = (
+    wk.groupby(["production_run", "weekday"], as_index=False)
+    .agg(performances=("attendees", "count"), attendees=("attendees", "sum"))
+)
+run_rate = run_rate[run_rate["production_run"].isin(charted)].copy()
+run_rate["rate"] = run_rate["attendees"] / run_rate["performances"]
+run_rate["run_start"] = run_rate["production_run"].map(
+    wk.groupby("production_run")["starts_on"].min()
+)
+
+recent = run_rate[run_rate["run_start"] >= "2021-01-01"]
+best_day = recent.loc[recent.groupby("production_run")["rate"].idxmax(), "weekday"]
+n_recent = recent["production_run"].nunique()
+n_recent_sun = int((best_day == "Sunday").sum())
+
+wk_periods = wk.assign(period=period(wk["starts_on"].dt.year))
+pd_rate = (
+    wk_periods.groupby(["period", "weekday"], observed=True)
+    .agg(performances=("attendees", "count"), attendees=("attendees", "sum"))
+    .reset_index()
+)
+pd_rate["rate"] = pd_rate["attendees"] / pd_rate["performances"]
+rate_of = lambda p, d: pd_rate.set_index(["period", "weekday"])["rate"].loc[(p, d)]
+```
+
+One dot per run and day — each run's attendees per performance on Fridays, Saturdays, and
+Sundays:
+
+```{python}
+#| label: fig-run-rate-over-time
+#| fig-cap: "Attendees per performance by day, one point per full-weekend theater run"
+fig = px.scatter(
+    run_rate.sort_values("run_start"),
+    x="run_start",
+    y="rate",
+    color="weekday",
+    color_discrete_map=DAY_COLORS,
+    category_orders={"weekday": ["Friday", "Saturday", "Sunday"]},
+    hover_name="production_run",
+    custom_data=["performances", "attendees"],
+)
+fig.update_traces(
+    hovertemplate=(
+        "<b>%{hovertext}</b><br>%{y:.0f} attendees/perf "
+        "(%{customdata[1]:,} over %{customdata[0]} shows)<extra>%{fullData.name}</extra>"
+    )
+)
+for d in ("Friday", "Saturday", "Sunday"):  # 5-run rolling average as a guide line
+    s = run_rate[run_rate["weekday"] == d].sort_values("run_start")
+    fig.add_scatter(
+        x=s["run_start"],
+        y=s["rate"].rolling(5, center=True, min_periods=3).mean(),
+        mode="lines",
+        line=dict(color=DAY_COLORS[d], width=1.5),
+        opacity=0.6,
+        showlegend=False,
+        hoverinfo="skip",
+    )
+fig.update_layout(
+    xaxis_title="Run opening date", yaxis_title="Attendees per performance", legend_title=""
+)
+style(fig).show()
+```
+
+Aggregated to periods:
+
+```{python}
+#| label: fig-run-rate-periods
+#| fig-cap: "Attendees per performance by day and period, full-weekend theater runs only"
+fig = px.bar(
+    pd_rate,
+    x="period",
+    y="rate",
+    color="weekday",
+    barmode="group",
+    color_discrete_map=DAY_COLORS,
+    category_orders={"period": PERIODS, "weekday": ["Friday", "Saturday", "Sunday"]},
+    custom_data=["performances"],
+)
+fig.update_traces(
+    hovertemplate="%{y:.1f} attendees/perf (%{customdata[0]} shows)<extra>%{fullData.name}</extra>"
+)
+fig.update_layout(
+    xaxis_title="Period", yaxis_title="Attendees per performance", legend_title=""
+)
+style(fig).show()
+```
+
+**Per-performance attendance has roughly doubled across the periods, and the day ranking has
+flipped. In 2013–2015 Friday was the strongest day
+(`{python} f"{rate_of('2013–2015', 'Friday'):.0f}"` per show vs
+`{python} f"{rate_of('2013–2015', 'Sunday'):.0f}"` on Sunday); in 2016–2020 the days were about
+even; since 2021 Sunday is clearly strongest —
+`{python} f"{rate_of('2021–2026', 'Sunday'):.0f}"` per show vs about
+`{python} f"{rate_of('2021–2026', 'Friday'):.0f}"` on Friday and Saturday. Sunday has been the
+best-attended day in `{python} f"{n_recent_sun}"` of the `{python} f"{n_recent}"` full-weekend
+runs since 2021.**
+
+Recent-period caveats: 2021–2026 rests on `{python} f"{n_recent}"` runs
+(`{python} f"{int(wk_periods[wk_periods['period'] == '2021–2026'].shape[0])}"` performances),
+and recent runs rarely schedule Saturday matinees, which used to pull Saturday's average down —
+yet Sunday leads anyway.
+
+## Do opera and music runs behave the same way?
 
 Music and opera get the same treatment: map event names to productions, keep runs that played
 all of Friday, Saturday, and Sunday. Almost all music events are one-off concerts (Music from
 Salem plays single afternoons, cabarets play one or two nights), so nearly everything that
 qualifies is opera — the summer festival stagings of 2013–2017, which also played real midweek
 (Wednesday/Thursday) performances — plus one 2015 musical folktale with a theater-style
-four-weekend run.
+four-weekend run. No over-time comparison is possible: the qualifying runs all fall in
+2013–2017.
 
 ```{python}
 #| label: setup-mo-runs
@@ -311,8 +351,91 @@ Saturday, the weakest day per show — diluted, as in theater, by Saturday matin
 sample is small (a few midweek performances, all in the 2013–2017 festival era), so treat the
 midweek numbers as suggestive rather than precise.
 
-The per-performance numbers above pool 2013–2026, but the day ranking has not been stable —
-Sunday has become the strongest day in recent years. That story is in
-[How things changed over time](04-trends.html). (That trend analysis is theater-only: the
-qualifying opera and music runs all fall in 2013–2017, too narrow a window for an over-time
-comparison.)
+## All events pooled, by day of week
+
+The coarser view: every event of every kind, whether or not it was part of a run. Counts here
+are **registrations** (a proxy for headcount), and because most events are scheduled on the day
+the organizers chose, this mostly reflects *what gets booked* rather than audience preference —
+use the within-run sections above for that. It is kept for context.
+
+```{python}
+#| label: tab-cat-weekday
+cat_order = ["theater", "music", "dance", "opera", "class"]
+named = regs[regs["event_minorcat"].isin(cat_order)].assign(
+    cat=lambda d: d["event_minorcat"]
+)
+combo = pd.concat([named, regs[regs["event_majorcat"] == "class"].assign(cat="class")])
+combo = combo.dropna(subset=["weekday"])
+tab = combo.groupby(["cat", "weekday"], observed=True).size().reset_index(name="attendance")
+pivot = (
+    tab.pivot(index="cat", columns="weekday", values="attendance")
+    .reindex(index=[c for c in cat_order if c in set(tab["cat"])])
+    .reindex(columns=WEEKDAY_ORDER)
+    .fillna(0)
+    .astype(int)
+)
+pivot.style.format("{:,}")
+```
+
+```{python}
+#| label: fig-weekday-facet
+#| fig-cap: "Registrations by day of week — one panel per programming type"
+fig = px.bar(
+    tab,
+    x="weekday",
+    y="attendance",
+    facet_col="cat",
+    category_orders={"cat": cat_order, "weekday": WEEKDAY_ORDER},
+    color_discrete_sequence=[BLUE],
+)
+fig.update_layout(yaxis_title="Registrations")
+fig.for_each_xaxis(lambda a: a.update(title=""))
+fig.update_traces(hovertemplate="%{y:,.0f}<extra></extra>")
+style(fig).show()
+```
+
+**Theater peaks Saturday; music peaks Sunday. Classes spread across the week with a Friday
+peak.**
+
+Has the pooled day mix shifted? Same data as shares within each period (again: this moves when
+the *schedule* moves, not necessarily the audience):
+
+```{python}
+#| label: fig-timing-over-time
+#| fig-cap: "Registration share by day of week, by period (all events)"
+pooled = regs.dropna(subset=["weekday"]).assign(
+    period=lambda d: period(d["starts_on"].dt.year)
+)
+rd = pooled.groupby(["weekday", "period"], observed=True).size().reset_index(name="attendance")
+rd["share"] = rd.groupby("period", observed=True)["attendance"].transform(
+    lambda s: s / s.sum()
+)
+fig = px.line(
+    rd, x="weekday", y="share", color="period",
+    category_orders={"weekday": WEEKDAY_ORDER, "period": PERIODS},
+    color_discrete_sequence=CATEGORICAL, markers=True,
+)
+fig.update_layout(
+    xaxis_title="Day of week", yaxis_title="Share of registrations", legend_title="Period"
+)
+fig.update_yaxes(tickformat=".0%")
+style(fig).show()
+```
+
+Finally, distance rather than volume: for **theater only**, registrations from each distance
+band on each day of the week — "do Friday/Saturday theater audiences travel farther than
+Sunday's?"
+
+```{python}
+#| label: tab-theater-day-band
+theater = regs[regs["event_minorcat"] == "theater"].dropna(subset=["weekday", "distance_band"])
+(
+    theater.groupby(["weekday", "distance_band"], observed=True)
+    .size()
+    .unstack("distance_band")
+    .reindex(WEEKDAY_ORDER)
+    .fillna(0)
+    .astype(int)
+    .style.format("{:,}")
+)
+```

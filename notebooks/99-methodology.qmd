@@ -1,0 +1,51 @@
+---
+editor_options:
+  chunk_output_type: console
+---
+
+# Methodology {.appendix}
+
+## Data and reproducibility
+
+This book is built from data pulled directly from the **Neon CRM** API. Every figure is
+reproducible: data is extracted, cleaned, geocoded, and summarized by the `hh` package, then read
+from saved parquet tables in `data/20_processed/`. All numbers in the prose are computed from the
+data at render time, so they stay correct as the data is refreshed. Every API pull is recorded in
+a manifest (endpoint, filters, timestamps, row counts, file hashes, code commit), and raw extracts
+are immutable — see the project README for the full provenance story.
+
+All published charts and tables are **aggregates** (counts and dollar totals by category,
+distance band, and day of week) — no individual is identified.
+
+## Geography
+
+Distances are straight-line (haversine) from Hubbard Hall (25 E Main St, Cambridge NY) to each
+household, bucketed into half-open mile bands. Households whose only address is a PO box are
+placed at their ZIP's centroid and flagged "approximate"; they are excluded from the tight 1-mile
+count so it stays honest.
+
+## Attendance headcount
+
+Registration counts understate attendance: one registration is a purchase, and averages about two
+attendees. Where the text says **headcount**, it counts ticket attendees whose registration
+status is SUCCEEDED — this also automatically drops canceled and refunded attendees.
+
+## Reconstructing multi-day production runs
+
+Each performance night is a separate Neon event (e.g. "Fun Home - Friday, February 3 at
+7:30 pm") — there is no field linking the nights of a run. Runs are therefore reconstructed by a
+manually curated mapping from event names to productions (`hh.analytics.productions`):
+
+- **Mapping.** Every theater event name matches exactly one production title pattern (coverage is
+  exhaustive and tested). For music and opera, only titles with multiple performances are mapped;
+  one-off concerts cannot form a run and are dropped.
+- **Runs.** A production's performances are split into separate runs when consecutive dates are
+  more than 45 days apart — this separates recurring titles (Winter Carnival of New Work,
+  Whispering Bones, Bread & Puppet) into their yearly runs.
+- **Exclusions.** Events that were not regular public performances are dropped before mapping:
+  canceled or moved dates, test events, open/dress/pay-what-you-will rehearsals, online
+  productions, day-long special events, and weekday 10 am school shows.
+- **Full-weekend runs.** The within-run day-of-week analysis keeps only runs that played all
+  three of Friday, Saturday, and Sunday, so day comparisons hold the production constant.
+- **Time slots.** A performance is classified a *matinee* if its name contains "2 pm" or
+  "matinee"; otherwise *evening*.

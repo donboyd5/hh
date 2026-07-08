@@ -1,6 +1,6 @@
 # Hubbard Hall — data analysis (Neon CRM → Python → Quarto)
 
-Provenance-driven analysis of Hubbard Hall constituents: **donors, patrons, and class-takers**.
+Provenance-driven analysis of Hubbard Hall stakeholders: **donors, patrons, and class-takers**.
 The project ingests data from the **Neon CRM REST API v2**, cleans and categorizes it (ported from
 the prior R project in `R_hhfrc/`), adds a **geography + distance** layer and **timing** analysis
 that the R work lacked, and publishes the findings as **Quarto web books** for the HH board.

@@ -88,3 +88,59 @@ prec = (
 )
 prec.style.format({"centroid_share": pct})
 ```
+
+## Has donor geography changed over time?
+
+The same dollars, split into roughly five-year periods and shown as **shares within each
+period**, so changes in the *mix* are visible regardless of overall growth. (This uses
+gift-level dates, unlike the lifetime household totals above.)
+
+```{python}
+#| label: setup-geo-trends
+from hh.clean.accounts import clean_accounts
+from hh.clean.donations import clean_donations
+from hh.analytics.donors import succeeded_individual_gifts
+
+PERIODS = ["2013–2015", "2016–2020", "2021–2026"]
+BANDS = ["[0, 1)", "[1, 5)", "[5, 10)", "[10, 20)", "[20, ∞)"]
+BAND_COLORS = dict(zip(BANDS, ["#b7d3f6", "#6da7ec", "#3987e5", "#184f95", "#0d366b"]))
+
+accounts_geo = read_parquet("processed", "accounts_geocoded.parquet")
+gifts = succeeded_individual_gifts(clean_donations(accounts=clean_accounts()))
+gifts["distance_band"] = gifts["account_id"].map(
+    accounts_geo.set_index("account_id")["distance_band"]
+)
+gifts["period"] = pd.cut(
+    gifts["donation_date"].dt.year, bins=[2010, 2015, 2020, 2026], labels=PERIODS
+)
+gd = (
+    gifts.dropna(subset=["distance_band", "period"])
+    .groupby(["period", "distance_band"], observed=True)["donation_amount"]
+    .sum()
+    .reset_index()
+)
+gd["share"] = gd.groupby("period", observed=True)["donation_amount"].transform(
+    lambda s: s / s.sum()
+)
+w10 = {
+    p: f"{gd[(gd['period'] == p) & (gd['distance_band'].isin(BANDS[:3]))]['share'].sum():.0%}"
+    for p in PERIODS
+}
+```
+
+```{python}
+#| label: fig-geo-over-time
+#| fig-cap: "Donor-dollar share by distance band, by period"
+fig = px.bar(
+    gd, x="period", y="share", color="distance_band",
+    color_discrete_map=BAND_COLORS, category_orders={"distance_band": BANDS},
+)
+fig.update_layout(
+    xaxis_title="Period", yaxis_title="Share of donated $", legend_title="Distance band"
+)
+fig.update_yaxes(tickformat=".0%")
+style(fig).show()
+```
+
+**The within-10-mile share of donated dollars was `{python} w10['2013–2015']` in 2013–2015,
+`{python} w10['2016–2020']` in 2016–2020, and `{python} w10['2021–2026']` in 2021–2026.**

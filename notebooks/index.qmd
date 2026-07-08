@@ -3,16 +3,11 @@ editor_options:
   chunk_output_type: console
 ---
 
-# Hubbard Hall constituent analysis
+# Hubbard Hall stakeholder analysis
 
-This book explores Hubbard Hall's constituents — **donors, patrons, and class-takers** — using data
-pulled directly from the **Neon CRM** API. Every figure is reproducible: data is extracted, cleaned,
-geocoded, and summarized by the `hh` package, then read from saved parquet tables in
-`data/20_processed/`. All numbers in the prose below are computed from the data, so they stay
-correct as the data is refreshed.
-
-All charts here are **aggregates** (counts and dollar totals by category, distance band, and day of
-week) — no individual is identified.
+This book explores Hubbard Hall's stakeholders — **donors, patrons, and class-takers**. All
+charts are aggregates; no individual is identified. Data sources, definitions, and methods are in
+the [Methodology](99-methodology.html) appendix.
 
 **Headline findings**
 
@@ -53,12 +48,8 @@ n_all3 = f"{int((households['is_donor'] & households['is_patron'] & households['
   Fri/Sat/Sun, Saturday leads only because it usually has two shows — per performance the three
   days are essentially tied, and Saturday matinees are the weekend's weakest slot. The ranking
   is shifting: since 2021, Sunday has been the best-attended day per performance in nearly every
-  full-weekend run.
+  full-weekend run. Details are in
+  [When people come to Hubbard Hall](02-timing.html).
 - **Strong overlap:** of `{python} n_hh` households, `{python} n_donors` donate,
   `{python} n_patrons` attend performances, and `{python} n_class` take classes;
   `{python} n_donor_class` both donate and take classes, `{python} n_all3` do all three.
-
-> **A note on "multi-day runs."** Each performance night is a separate Neon event — there is no
-> field linking the nights of a run — so runs are reconstructed by manually mapping event names to
-> productions (`hh.analytics.productions`). Attendance by day within Fri/Sat/Sun theater runs is
-> in the [When people come](02-timing.html) chapter.
