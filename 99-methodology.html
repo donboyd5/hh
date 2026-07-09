@@ -23,10 +23,45 @@ ul.task-list li input[type="checkbox"] {
   margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
   vertical-align: middle;
 }
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
 </style>
 
 
-<script src="site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jquery@3.5.1/dist/jquery.min.js" integrity="sha384-ZvpUoO/+PpLXR1lu4jmpXWu80pZlYUAfxl5NsBMWOEPSjUn/6Z/hRTt8+pR6L4N2" crossorigin="anonymous"></script><script src="site_libs/quarto-nav/quarto-nav.js"></script>
 <script src="site_libs/quarto-nav/headroom.min.js"></script>
 <script src="site_libs/clipboard/clipboard.min.js"></script>
 <script src="site_libs/quarto-search/autocomplete.umd.js"></script>
@@ -71,6 +106,9 @@ ul.task-list li input[type="checkbox"] {
     "search-label": "Search"
   }
 }</script>
+<script src="https://cdn.jsdelivr.net/npm/requirejs@2.3.6/require.min.js" integrity="sha384-c9c+LnTbwQ3aujuU7ULEPVvgLs+Fn6fJUvIGTsuu1ZcCf11fiEubah0ttpca4ntM sha384-6V1/AdqZRWk1KAlWbKBlGhN7VG4iE/yAZcO6NZPMF8od0vukrvr0tg4qY6NSrItx" crossorigin="anonymous"></script>
+
+<script type="application/javascript">define('jquery', [],function() {return window.jQuery;})</script>
 
 
 </head>
@@ -112,7 +150,7 @@ ul.task-list li input[type="checkbox"] {
         <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="./index.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text"><span class="chapter-number">1</span>&nbsp; <span class="chapter-title">Hubbard Hall stakeholder analysis</span></span></a>
+ <span class="menu-text"><span class="chapter-number">1</span>&nbsp; <span class="chapter-title">Headline findings</span></span></a>
   </div>
 </li>
         <li class="sidebar-item">
@@ -173,9 +211,12 @@ ul.task-list li input[type="checkbox"] {
    
   <ul>
   <li><a href="#data-and-reproducibility" id="toc-data-and-reproducibility" class="nav-link active" data-scroll-target="#data-and-reproducibility"><span class="header-section-number">A.1</span> Data and reproducibility</a></li>
-  <li><a href="#geography" id="toc-geography" class="nav-link" data-scroll-target="#geography"><span class="header-section-number">A.2</span> Geography</a></li>
-  <li><a href="#attendance-headcount" id="toc-attendance-headcount" class="nav-link" data-scroll-target="#attendance-headcount"><span class="header-section-number">A.3</span> Attendance headcount</a></li>
-  <li><a href="#reconstructing-multi-day-production-runs" id="toc-reconstructing-multi-day-production-runs" class="nav-link" data-scroll-target="#reconstructing-multi-day-production-runs"><span class="header-section-number">A.4</span> Reconstructing multi-day production runs</a></li>
+  <li><a href="#about-the-data" id="toc-about-the-data" class="nav-link" data-scroll-target="#about-the-data"><span class="header-section-number">A.2</span> About the data</a></li>
+  <li><a href="#data-cleaning" id="toc-data-cleaning" class="nav-link" data-scroll-target="#data-cleaning"><span class="header-section-number">A.3</span> Data cleaning</a></li>
+  <li><a href="#definitions" id="toc-definitions" class="nav-link" data-scroll-target="#definitions"><span class="header-section-number">A.4</span> Definitions</a></li>
+  <li><a href="#geography" id="toc-geography" class="nav-link" data-scroll-target="#geography"><span class="header-section-number">A.5</span> Geography</a></li>
+  <li><a href="#attendance-headcount" id="toc-attendance-headcount" class="nav-link" data-scroll-target="#attendance-headcount"><span class="header-section-number">A.6</span> Attendance headcount</a></li>
+  <li><a href="#reconstructing-multi-day-production-runs" id="toc-reconstructing-multi-day-production-runs" class="nav-link" data-scroll-target="#reconstructing-multi-day-production-runs"><span class="header-section-number">A.7</span> Reconstructing multi-day production runs</a></li>
   </ul>
 </nav>
     </div>
@@ -206,16 +247,127 @@ ul.task-list li input[type="checkbox"] {
 <p>This book is built from data pulled directly from the <strong>Neon CRM</strong> API. Every figure is reproducible: data is extracted, cleaned, geocoded, and summarized by the <code>hh</code> package, then read from saved parquet tables in <code>data/20_processed/</code>. All numbers in the prose are computed from the data at render time, so they stay correct as the data is refreshed. Every API pull is recorded in a manifest (endpoint, filters, timestamps, row counts, file hashes, code commit), and raw extracts are immutable — see the project README for the full provenance story.</p>
 <p>All published charts and tables are <strong>aggregates</strong> (counts and dollar totals by category, distance band, and day of week) — no individual is identified.</p>
 </section>
-<section id="geography" class="level2" data-number="A.2">
-<h2 data-number="A.2" class="anchored" data-anchor-id="geography"><span class="header-section-number">A.2</span> Geography</h2>
+<section id="about-the-data" class="level2" data-number="A.2">
+<h2 data-number="A.2" class="anchored" data-anchor-id="about-the-data"><span class="header-section-number">A.2</span> About the data</h2>
+<p>The raw data is pulled from the <strong>Neon CRM REST API (v2)</strong> and saved exactly as Neon returns it. There are four entities, and every record retrieved streams straight to disk — analysis never depends on the live API.</p>
+<ul>
+<li><strong>Accounts</strong> — every constituent: donors, ticket-buyers, and class-takers, as individuals and households. One row per Neon account. Carries identity (account id, account type, first / last / full / company name), household membership (household id and name), mailing address (street, city, state, ZIP, country), contact info (email, phone), and the <strong>deceased</strong> and <strong>do-not-contact</strong> flags used to filter people out.</li>
+<li><strong>Donations</strong> — every gift. One row per donation, tied to an account by account id. Carries amount, date, type (<code>DONATION</code> or <code>PLEDBGEPAYMENT</code>), status (e.g.&nbsp;<code>SUCCEEDED</code>), and fund / campaign / purpose / source. It carries no household id; that link is recovered during cleaning.</li>
+<li><strong>Events</strong> — every scheduled event: a single performance, class, or community happening. One row per Neon event. Carries the event name, Neon’s event category, start and end dates, capacity, and Neon’s attendee count. There is no field linking the nights of a multi-night run; runs are reconstructed later.</li>
+<li><strong>Registrations</strong> — every ticket / registration purchase, linking an account to an event. One row per registration, with nested ticket and attendee records (used to count true headcount). Carries the registrant’s account id, amount, date-time, and source / origin.</li>
+</ul>
+<div id="cell-raw-data-summary" class="cell" data-execution_count="1">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pandas <span class="im">as</span> pd</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> hh.io <span class="im">import</span> load_raw</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>_raw <span class="op">=</span> pd.DataFrame(</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    {</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>        <span class="st">"entity"</span>: [<span class="st">"accounts"</span>, <span class="st">"donations"</span>, <span class="st">"events"</span>, <span class="st">"registrations"</span>],</span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>        <span class="st">"what it is"</span>: [</span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>            <span class="st">"Constituents — donors, patrons, class-takers (individuals &amp; households)"</span>,</span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>            <span class="st">"Gifts, one per donation"</span>,</span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>            <span class="st">"Scheduled events — one performance, class, or community event"</span>,</span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>            <span class="st">"Ticket/registration purchases linking an account to an event"</span>,</span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>        ],</span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    }</span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>_raw[<span class="st">"records"</span>] <span class="op">=</span> [<span class="bu">len</span>(load_raw(e)) <span class="cf">for</span> e <span class="kw">in</span> _raw[<span class="st">"entity"</span>]]</span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>_raw[[<span class="st">"entity"</span>, <span class="st">"records"</span>, <span class="st">"what it is"</span>]]</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div id="raw-data-summary" class="cell-output cell-output-display" data-execution_count="1">
+<div>
+
+
+<table class="dataframe caption-top table table-sm table-striped small" data-border="1">
+<thead>
+<tr class="header">
+<th data-quarto-table-cell-role="th"></th>
+<th data-quarto-table-cell-role="th">entity</th>
+<th data-quarto-table-cell-role="th">records</th>
+<th data-quarto-table-cell-role="th">what it is</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<th data-quarto-table-cell-role="th">0</th>
+<td>accounts</td>
+<td>5094</td>
+<td>Constituents — donors, patrons, class-takers (...</td>
+</tr>
+<tr class="even">
+<th data-quarto-table-cell-role="th">1</th>
+<td>donations</td>
+<td>8912</td>
+<td>Gifts, one per donation</td>
+</tr>
+<tr class="odd">
+<th data-quarto-table-cell-role="th">2</th>
+<td>events</td>
+<td>2564</td>
+<td>Scheduled events — one performance, class, or ...</td>
+</tr>
+<tr class="even">
+<th data-quarto-table-cell-role="th">3</th>
+<td>registrations</td>
+<td>27371</td>
+<td>Ticket/registration purchases linking an accou...</td>
+</tr>
+</tbody>
+</table>
+
+</div>
+</div>
+</div>
+<div class="{callout-note}">
+<p>Record counts are computed from the latest saved pull at render time, so they stay correct as the data is refreshed. <strong>Format &amp; storage.</strong> Each pull is written as newline-delimited JSON (<code>.jsonl</code>, one record per line) into an immutable, timestamped folder <code>data/00_raw/neon/pull-&lt;UTC&gt;/</code>, alongside a <code>manifest.yaml</code> that records the endpoint, filters, output fields, Neon-reported counts, timestamps, file SHA-256 hashes, and the code commit. Accounts, donations, and events are pulled in one pass (<code>scripts/pull.py</code>); registrations are gathered by a per-event sweep (<code>scripts/sweep_registrations.py</code>) because Neon serves them event-by-event. Downstream code always reads these saved files (<code>hh.io.load_raw</code>), never the live API.</p>
+</div>
+</section>
+<section id="data-cleaning" class="level2" data-number="A.3">
+<h2 data-number="A.3" class="anchored" data-anchor-id="data-cleaning"><span class="header-section-number">A.3</span> Data cleaning</h2>
+<p>Cleaning turns the raw API records into standardized analytic tables (the <code>hh.clean</code> package). It is purely deterministic and re-runs from the saved raw files on every <code>scripts/build.py</code>, so the processed tables in <code>data/20_processed/</code> can always be rebuilt.</p>
+<ul>
+<li><strong>Column standardization.</strong> Neon’s output-field names are mapped to short <code>snake_case</code> names. Each entity has an explicit field map (for example, <code>Account ID → account_id</code>, <code>Donation Amount → donation_amount</code>); any column not in the map is converted by <code>vmap</code>, a faithful port of the R project’s renaming function (<code>hh.clean.standardize</code>).</li>
+<li><strong>Type parsing.</strong> Dollar amounts are coerced to numeric and dates to datetimes, with malformed values turned into missing rather than crashing.</li>
+<li><strong>Flag conversion.</strong> The deceased and do-not-contact text fields (<code>"Yes"</code>) become real booleans.</li>
+<li><strong>Household rollup.</strong> Every analytic record gets a canonical household id, name, and group (<code>hh.clean.households.add_rollup</code>): <code>id</code> is the household id when Neon assigns one, otherwise the account id; <code>group</code> is <code>household</code>, <code>account</code>, or <code>other</code>; <code>name</code> is the first non-empty of household name, full name, or company name.</li>
+<li><strong>Recovering links the API omits.</strong> Donations carry an account id but no household id, so household membership is recovered by joining the cleaned accounts on account id. Registrations likewise join accounts (for the household) and events (for the event’s category), and fall back to a swept event id when the registration’s own event id is missing.</li>
+<li><strong>Event categorization.</strong> Each event is classified into a major category (performance / class / community / other) and, for performances, a minor category (theater / music / dance / opera / other) by ordered rules ported from the R project. An event that matches no rule is flagged <code>ERROR</code> on purpose, so anything uncategorized surfaces instead of hiding. See <a href="#definitions">Definitions</a> for the categories themselves.</li>
+<li><strong>Manual overrides.</strong> Curated one-off corrections live in <code>config/overrides.yaml</code>, kept separate from code.</li>
+<li><strong>Geographic cleaning.</strong> Addresses are resolved to a point with a documented precision — a real street address first, then a household member’s street address for PO-box accounts, then a ZIP centroid as a last resort, and <code>unmapped</code> if nothing works (see <a href="#geography">Geography</a>). PO-box-only households are flagged so the tight distance counts stay honest.</li>
+</ul>
+</section>
+<section id="definitions" class="level2" data-number="A.4">
+<h2 data-number="A.4" class="anchored" data-anchor-id="definitions"><span class="header-section-number">A.4</span> Definitions</h2>
+<p>How we select and define the people and events in this book. Every definition rolls a constituent up to their household first (see <a href="#data-cleaning">Data cleaning</a>); person-level counts are at the household level.</p>
+<ul>
+<li><strong>Household.</strong> The analytic unit: the household id when Neon assigns one, otherwise the single account id. A person in a Neon household is counted once with their housemates; a standalone account is its own household.</li>
+<li><strong>Donor.</strong> A household whose total succeeded individual gifts are greater than zero. A gift counts when its status is <code>SUCCEEDED</code>, its type is <code>DONATION</code> or <code>PLEDBGEPAYMENT</code>, and the account is an <code>Individual</code>; we then drop gifts from accounts marked deceased or do-not-contact, and a known junk account (<code>36805</code>). Variables used: <code>donation_amount</code>, <code>donation_status</code>, <code>donation_type</code>, <code>account_type</code>, <code>deceased</code>, <code>do_not_contact</code>.</li>
+<li><strong>Patron.</strong> A household with one or more performance registrations (<code>is_patron = n_performance &gt; 0</code>).</li>
+<li><strong>Class-taker.</strong> A household with one or more class registrations (<code>is_class_taker = n_class &gt; 0</code>).</li>
+<li><strong>Major category (performance / class / community / other).</strong> Assigned from Neon’s event category and the event name, in order, first match wins. For example, an event in a <code>Performances</code>, <code>Theater Performances</code>, <code>Music Performances</code>, or <code>Opera Performances</code> category is a performance (with a few named exceptions that are really classes); events in class or community categories fall to those buckets; anything unmatched is <code>other</code>. An event matching no rule at all is flagged <code>ERROR</code> as a tripwire.</li>
+<li><strong>Minor category (theater / music / dance / opera / other — performances only).</strong> Assigned after the major category, again first match wins; anything unmatched is <code>other</code>. Theater and opera lean on Neon’s category plus title patterns; music and dance use category plus title patterns.
+<ul>
+<li><em>Theater</em> — category <code>Shakespeare</code> or <code>Theater Performances</code>, or a title matching a known theater production.</li>
+<li><em>Opera</em> — category <code>Opera Performances</code>, or the title contains “Opera”.</li>
+<li><em>Music</em> — a Music category, or the title matches music patterns (Concert, Cabaret, named artists, and the like).</li>
+<li><em>Dance</em> — a Dance category or title.</li>
+</ul></li>
+<li><strong>Attendance (headcount).</strong> A registration is a purchase, not a person; it averages about two attendees. Headcount counts ticket attendees whose registration status is <code>SUCCEEDED</code> (see <a href="#attendance-headcount">Attendance headcount</a>).</li>
+<li><strong>Production and run.</strong> A production is a title matched from the event name to a curated list; a run is that title’s performances split when dates gap by more than 45 days (see <a href="#reconstructing-multi-day-production-runs">Reconstructing multi-day production runs</a>).</li>
+</ul>
+</section>
+<section id="geography" class="level2" data-number="A.5">
+<h2 data-number="A.5" class="anchored" data-anchor-id="geography"><span class="header-section-number">A.5</span> Geography</h2>
 <p>Distances are straight-line (haversine) from Hubbard Hall (25 E Main St, Cambridge NY) to each household, bucketed into half-open mile bands. Households whose only address is a PO box are placed at their ZIP’s centroid and flagged “approximate”; they are excluded from the tight 1-mile count so it stays honest.</p>
 </section>
-<section id="attendance-headcount" class="level2" data-number="A.3">
-<h2 data-number="A.3" class="anchored" data-anchor-id="attendance-headcount"><span class="header-section-number">A.3</span> Attendance headcount</h2>
+<section id="attendance-headcount" class="level2" data-number="A.6">
+<h2 data-number="A.6" class="anchored" data-anchor-id="attendance-headcount"><span class="header-section-number">A.6</span> Attendance headcount</h2>
 <p>Registration counts understate attendance: one registration is a purchase, and averages about two attendees. Where the text says <strong>headcount</strong>, it counts ticket attendees whose registration status is SUCCEEDED — this also automatically drops canceled and refunded attendees.</p>
 </section>
-<section id="reconstructing-multi-day-production-runs" class="level2" data-number="A.4">
-<h2 data-number="A.4" class="anchored" data-anchor-id="reconstructing-multi-day-production-runs"><span class="header-section-number">A.4</span> Reconstructing multi-day production runs</h2>
+<section id="reconstructing-multi-day-production-runs" class="level2" data-number="A.7">
+<h2 data-number="A.7" class="anchored" data-anchor-id="reconstructing-multi-day-production-runs"><span class="header-section-number">A.7</span> Reconstructing multi-day production runs</h2>
 <p>Each performance night is a separate Neon event (e.g.&nbsp;“Fun Home - Friday, February 3 at 7:30 pm”) — there is no field linking the nights of a run. Runs are therefore reconstructed by a manually curated mapping from event names to productions (<code>hh.analytics.productions</code>):</p>
 <ul>
 <li><strong>Mapping.</strong> Every theater event name matches exactly one production title pattern (coverage is exhaustive and tested). For music and opera, only titles with multiple performances are mapped; one-off concerts cannot form a run and are dropped.</li>
