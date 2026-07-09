@@ -17,6 +17,130 @@ are immutable — see the project README for the full provenance story.
 All published charts and tables are **aggregates** (counts and dollar totals by category,
 distance band, and day of week) — no individual is identified.
 
+## About the data
+
+The raw data is pulled from the **Neon CRM REST API (v2)** and saved exactly as Neon returns it.
+There are four entities, and every record retrieved streams straight to disk — analysis never
+depends on the live API.
+
+- **Accounts** — every constituent: donors, ticket-buyers, and class-takers, as individuals and
+  households. One row per Neon account. Carries identity (account id, account type, first / last /
+  full / company name), household membership (household id and name), mailing address (street, city,
+  state, ZIP, country), contact info (email, phone), and the **deceased** and **do-not-contact**
+  flags used to filter people out.
+- **Donations** — every gift. One row per donation, tied to an account by account id. Carries
+  amount, date, type (`DONATION` or `PLEDBGEPAYMENT`), status (e.g. `SUCCEEDED`), and fund /
+  campaign / purpose / source. It carries no household id; that link is recovered during cleaning.
+- **Events** — every scheduled event: a single performance, class, or community happening. One row
+  per Neon event. Carries the event name, Neon's event category, start and end dates, capacity, and
+  Neon's attendee count. There is no field linking the nights of a multi-night run; runs are
+  reconstructed later.
+- **Registrations** — every ticket / registration purchase, linking an account to an event. One row
+  per registration, with nested ticket and attendee records (used to count true headcount). Carries
+  the registrant's account id, amount, date-time, and source / origin.
+
+```{python}
+#| label: raw-data-summary
+import pandas as pd
+from hh.io import load_raw
+
+_raw = pd.DataFrame(
+    {
+        "entity": ["accounts", "donations", "events", "registrations"],
+        "what it is": [
+            "Constituents — donors, patrons, class-takers (individuals & households)",
+            "Gifts, one per donation",
+            "Scheduled events — one performance, class, or community event",
+            "Ticket/registration purchases linking an account to an event",
+        ],
+    }
+)
+_raw["records"] = [len(load_raw(e)) for e in _raw["entity"]]
+_raw[["entity", "records", "what it is"]]
+```
+
+::: {callout-note}
+Record counts are computed from the latest saved pull at render time, so they stay correct as the
+data is refreshed. **Format & storage.** Each pull is written as newline-delimited JSON (`.jsonl`,
+one record per line) into an immutable, timestamped folder `data/00_raw/neon/pull-<UTC>/`, alongside
+a `manifest.yaml` that records the endpoint, filters, output fields, Neon-reported counts,
+timestamps, file SHA-256 hashes, and the code commit. Accounts, donations, and events are pulled in
+one pass (`scripts/pull.py`); registrations are gathered by a per-event sweep
+(`scripts/sweep_registrations.py`) because Neon serves them event-by-event. Downstream code always
+reads these saved files (`hh.io.load_raw`), never the live API.
+:::
+
+## Data cleaning
+
+Cleaning turns the raw API records into standardized analytic tables (the `hh.clean` package). It is
+purely deterministic and re-runs from the saved raw files on every `scripts/build.py`, so the
+processed tables in `data/20_processed/` can always be rebuilt.
+
+- **Column standardization.** Neon's output-field names are mapped to short `snake_case` names. Each
+  entity has an explicit field map (for example, `Account ID → account_id`,
+  `Donation Amount → donation_amount`); any column not in the map is converted by `vmap`, a faithful
+  port of the R project's renaming function (`hh.clean.standardize`).
+- **Type parsing.** Dollar amounts are coerced to numeric and dates to datetimes, with malformed
+  values turned into missing rather than crashing.
+- **Flag conversion.** The deceased and do-not-contact text fields (`"Yes"`) become real booleans.
+- **Household rollup.** Every analytic record gets a canonical household id, name, and group
+  (`hh.clean.households.add_rollup`): `id` is the household id when Neon assigns one, otherwise the
+  account id; `group` is `household`, `account`, or `other`; `name` is the first non-empty of
+  household name, full name, or company name.
+- **Recovering links the API omits.** Donations carry an account id but no household id, so
+  household membership is recovered by joining the cleaned accounts on account id. Registrations
+  likewise join accounts (for the household) and events (for the event's category), and fall back to
+  a swept event id when the registration's own event id is missing.
+- **Event categorization.** Each event is classified into a major category (performance / class /
+  community / other) and, for performances, a minor category (theater / music / dance / opera /
+  other) by ordered rules ported from the R project. An event that matches no rule is flagged
+  `ERROR` on purpose, so anything uncategorized surfaces instead of hiding. See
+  [Definitions](#definitions) for the categories themselves.
+- **Manual overrides.** Curated one-off corrections live in `config/overrides.yaml`, kept separate
+  from code.
+- **Geographic cleaning.** Addresses are resolved to a point with a documented precision — a real
+  street address first, then a household member's street address for PO-box accounts, then a ZIP
+  centroid as a last resort, and `unmapped` if nothing works (see [Geography](#geography)). PO-box-only households are flagged so the tight distance counts stay honest.
+
+## Definitions
+
+How we select and define the people and events in this book. Every definition rolls a constituent up
+to their household first (see [Data cleaning](#data-cleaning)); person-level counts are at the
+household level.
+
+- **Household.** The analytic unit: the household id when Neon assigns one, otherwise the single
+  account id. A person in a Neon household is counted once with their housemates; a standalone
+  account is its own household.
+- **Donor.** A household whose total succeeded individual gifts are greater than zero. A gift counts
+  when its status is `SUCCEEDED`, its type is `DONATION` or `PLEDBGEPAYMENT`, and the account is an
+  `Individual`; we then drop gifts from accounts marked deceased or do-not-contact, and a known junk
+  account (`36805`). Variables used: `donation_amount`, `donation_status`, `donation_type`,
+  `account_type`, `deceased`, `do_not_contact`.
+- **Patron.** A household with one or more performance registrations (`is_patron = n_performance >
+  0`).
+- **Class-taker.** A household with one or more class registrations (`is_class_taker = n_class > 0`).
+- **Major category (performance / class / community / other).** Assigned from Neon's event category
+  and the event name, in order, first match wins. For example, an event in a `Performances`,
+  `Theater Performances`, `Music Performances`, or `Opera Performances` category is a performance
+  (with a few named exceptions that are really classes); events in class or community categories fall
+  to those buckets; anything unmatched is `other`. An event matching no rule at all is flagged
+  `ERROR` as a tripwire.
+- **Minor category (theater / music / dance / opera / other — performances only).** Assigned after
+  the major category, again first match wins; anything unmatched is `other`. Theater and opera lean
+  on Neon's category plus title patterns; music and dance use category plus title patterns.
+  - *Theater* — category `Shakespeare` or `Theater Performances`, or a title matching a known theater
+    production.
+  - *Opera* — category `Opera Performances`, or the title contains "Opera".
+  - *Music* — a Music category, or the title matches music patterns (Concert, Cabaret, named
+    artists, and the like).
+  - *Dance* — a Dance category or title.
+- **Attendance (headcount).** A registration is a purchase, not a person; it averages about two
+  attendees. Headcount counts ticket attendees whose registration status is `SUCCEEDED` (see
+  [Attendance headcount](#attendance-headcount)).
+- **Production and run.** A production is a title matched from the event name to a curated list; a
+  run is that title's performances split when dates gap by more than 45 days (see
+  [Reconstructing multi-day production runs](#reconstructing-multi-day-production-runs)).
+
 ## Geography
 
 Distances are straight-line (haversine) from Hubbard Hall (25 E Main St, Cambridge NY) to each
