@@ -1,5 +1,9 @@
 # hh — project notes for Claude Code
 
+**Read `meta-docs/RULES.md` at the start of every session** — it holds the standing working
+rules (branches/PRs, testing, documentation, minimal interpretation in the web pages, strong
+docs in the appendix).
+
 ## Git workflow
 
 - **Never commit directly to `main`.** Do all work on a branch (`feature/…`, `fix/…`,

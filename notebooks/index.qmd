@@ -3,13 +3,11 @@ editor_options:
   chunk_output_type: console
 ---
 
-# Hubbard Hall stakeholder analysis
+# Headline findings
 
 This book explores Hubbard Hall's stakeholders — **donors, patrons, and class-takers**. All
 charts are aggregates; no individual is identified. Data sources, definitions, and methods are in
 the [Methodology](99-methodology.html) appendix.
-
-**Headline findings**
 
 ```{python}
 #| label: setup
