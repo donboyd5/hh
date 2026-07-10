@@ -1,0 +1,84 @@
+---
+editor_options:
+  chunk_output_type: console
+---
+
+# Who takes classes at Hubbard Hall?
+
+A first look at the class-taking stakeholder group — how many households they are, where they
+live, how class-taking has changed over time, and how much they overlap with donors and
+performance audiences. This is a starter chapter; further class questions (which classes, who
+returns, class-takers as future donors) are queued in the appendix. Distances are straight-line
+from the hall; see [Methodology](99-methodology.html). How far class and performance audiences
+travel is compared in [How far do people travel to Hubbard Hall?](03-travel-distance.html).
+
+```{python}
+#| label: setup-classes
+import pandas as pd
+import plotly.express as px
+from hh.io import read_parquet
+from hh.viz import style, BLUE, pct
+
+hh = read_parquet("processed", "households_summary.parquet")
+regs = read_parquet("processed", "registrations_enriched.parquet")
+
+BAND_ORDER = ["[0, 1)", "[1, 5)", "[5, 10)", "[10, 20)", "[20, ∞)"]
+
+# class-taker geography
+ct = hh[hh["is_class_taker"]]
+band = ct.groupby("distance_band", observed=True)["id"].count().reindex(BAND_ORDER).fillna(0).astype(int)
+within10 = band.loc[["[0, 1)", "[1, 5)", "[5, 10)"]].sum() / band.sum()
+
+# class registrations over time (drop the partial current year)
+cls = regs[regs["event_majorcat"] == "class"].copy()
+cls["year"] = cls["starts_on"].dt.year
+max_year = int(cls["year"].max())
+complete_years = sorted(y for y in cls["year"].unique() if y < max_year)
+by_year = cls[cls["year"].isin(complete_years)].groupby("year").size().rename("registrations")
+ytd = int((cls["year"] == max_year).sum())
+
+# overlap with donors and patrons
+n_class = int(hh["is_class_taker"].sum())
+n_class_donor = int((hh["is_class_taker"] & hh["is_donor"]).sum())
+n_class_patron = int((hh["is_class_taker"] & hh["is_patron"]).sum())
+share_class_of_hh = hh["is_class_taker"].mean()
+```
+
+**`{python} f"{n_class:,}"`** households — **`{python} f"{share_class_of_hh:.0%}"`** of all
+households — have registered for a class. Of those, **`{python} f"{n_class_donor:,}"`** also
+donate and **`{python} f"{n_class_patron:,}"`** also attend performances (see [How do giving and
+participation overlap?](04-overlap.html)).
+
+## Where class-takers live
+
+```{python}
+#| label: fig-class-geography
+#| fig-cap: "Class-taking households by distance from Hubbard Hall"
+fig = px.bar(band.reset_index().rename(columns={"distance_band": "band", "id": "households"}),
+             x="band", y="households", category_orders={"band": BAND_ORDER},
+             color_discrete_sequence=[BLUE])
+fig.update_layout(xaxis_title="Distance from Hubbard Hall (miles)", yaxis_title="Class-taking households")
+fig.update_traces(hovertemplate="%{y:,.0f} households<extra></extra>")
+style(fig).show()
+```
+
+**`{python} f"{within10:.0%}"`** of class-taking households live within 10 miles of the hall —
+classes draw mostly from the immediate area, more locally than performances do.
+
+## Class registrations over time
+
+```{python}
+#| label: fig-class-over-time
+#| fig-cap: "Class registrations by year"
+fig = px.bar(by_year.reset_index(), x="year", y="registrations",
+             category_orders={"year": complete_years}, color_discrete_sequence=[BLUE])
+fig.update_layout(xaxis_title="Year (class start date)", yaxis_title="Class registrations")
+fig.update_traces(hovertemplate="%{x}: %{y:,.0f} registrations<extra></extra>")
+style(fig).show()
+```
+
+::: {callout-note}
+`{python} max_year` is **year-to-date**, so it is left out of the trend. So far in
+`{python} max_year` there have been about **`{python} f"{ytd:,}"`** class registrations; the
+full-year total will be higher.
+:::

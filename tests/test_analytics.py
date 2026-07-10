@@ -222,3 +222,87 @@ def test_opera_music_mapping():
     perf = production_performances(regs, minorcats=("music", "opera"))
     assert set(perf["production_run"]) == {"Rigoletto (opera) (2015)"}
     assert unmatched_events(regs, ("music", "opera")) == ["Music from Salem Concert: Baroque"]
+
+
+def _gifts(extra=None):
+    """Succeeded individual gifts with the household rollup `id` (as clean_donations yields)."""
+    base = pd.DataFrame(
+        {
+            "donation_id": ["g1", "g2", "g3", "g4", "g5"],
+            "id": ["H1", "H1", "H2", "H2", "H3"],
+            "account_id": ["A1", "A1", "A2", "A2", "A3"],
+            "account_type": ["Individual"] * 5,
+            "donation_type": ["DONATION"] * 5,
+            "donation_status": ["SUCCEEDED"] * 5,
+            "donation_amount": [50.0, 1200.0, 30.0, 30.0, 6000.0],
+            "donation_date": pd.to_datetime(
+                ["2023-05-01", "2024-06-01", "2023-07-01", "2024-07-01", "2023-09-01"]
+            ),
+        }
+    )
+    return base
+
+
+def test_size_tier_boundaries():
+    from hh.analytics.donors import size_tier, TIER_LABELS
+
+    assert size_tier(0) == "<$100"
+    assert size_tier(99.99) == "<$100"
+    assert size_tier(100) == "$100–999"
+    assert size_tier(999.99) == "$100–999"
+    assert size_tier(1000) == "$1,000–4,999"
+    assert size_tier(4999.99) == "$1,000–4,999"
+    assert size_tier(5000) == "$5,000+"
+    assert size_tier(1_000_000) == "$5,000+"
+    # tier labels stay in display order
+    assert TIER_LABELS == ["<$100", "$100–999", "$1,000–4,999", "$5,000+"]
+
+
+def test_annual_gifts_and_reconciliation():
+    from hh.analytics.donors import annual_gifts, succeeded_individual_gifts
+
+    raw = _gifts()
+    ag = annual_gifts(raw)
+    # all 5 succeeded individual gifts survive, with an integer year column
+    assert len(ag) == 5
+    assert {"id", "year", "donation_amount"} <= set(ag.columns)
+    # annual_gifts total reconciles with succeeded_individual_gifts total
+    assert ag["donation_amount"].sum() == succeeded_individual_gifts(raw)["donation_amount"].sum()
+
+
+def test_donors_by_size_year():
+    from hh.analytics.donors import annual_gifts, donors_by_size_year, TIER_LABELS
+
+    out = donors_by_size_year(annual_gifts(_gifts()))
+    # H1: 2023=$50 (<$100), 2024=$1200 ($1,000–4,999); H2: 2023=$30, 2024=$30 (both <$100);
+    # H3: 2023=$6000 ($5,000+)
+    row = out.set_index(["year", "tier"]).sort_index()
+    assert row.loc[(2023, "<$100"), "donors"] == 2          # H1 + H2
+    assert row.loc[(2023, "<$100"), "dollars"] == 80.0
+    assert row.loc[(2023, "$5,000+"), "donors"] == 1        # H3
+    assert row.loc[(2024, "$1,000–4,999"), "donors"] == 1   # H1
+    assert row.loc[(2024, "$1,000–4,999"), "dollars"] == 1200.0
+    # every tier label is a known one
+    assert set(out["tier"]).issubset(set(TIER_LABELS))
+
+
+def test_donors_above_threshold_by_year():
+    from hh.analytics.donors import annual_gifts, donors_above_threshold_by_year
+
+    big = donors_above_threshold_by_year(annual_gifts(_gifts()), min_amount=1000).set_index("year")
+    assert big.loc[2023, "donors"] == 1   # H3 ($6000)
+    assert big.loc[2024, "donors"] == 1   # H1 ($1200)
+    assert 2022 not in big.index
+
+
+def test_donor_retention():
+    from hh.analytics.donors import annual_gifts, donor_retention
+
+    ret = donor_retention(annual_gifts(_gifts())).set_index("year")
+    # H1 active in both 2023 and 2024 -> retained; H2 active in both -> retained; H3 only 2023
+    # so 2023 active=3, returned=2 -> 2/3
+    assert ret.loc[2023, "active"] == 3
+    assert ret.loc[2023, "returned_next_year"] == 2
+    assert abs(ret.loc[2023, "retention"] - 2 / 3) < 1e-9
+    # final year (2024) is dropped — no next year
+    assert 2024 not in ret.index

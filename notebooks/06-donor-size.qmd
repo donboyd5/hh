@@ -1,0 +1,123 @@
+---
+editor_options:
+  chunk_output_type: console
+---
+
+# How has giving by donation size changed over time?
+
+Each household's giving in a given year is put into one of four size tiers — **<$100**,
+**$100–999**, **$1,000–4,999**, and **$5,000+** — so we can watch the mix of small and large
+donors shift over time. Giving is counted the same way as elsewhere: SUCCEEDED individual gifts
+(DONATION and PLEDGEPAYMENT), rolled up to the household (see
+[Methodology](99-methodology.html)). Donors are defined in [Are large donors going
+away?](07-donor-persistence.html); where they live is in [Where do donors
+live?](01-donor-geography.html).
+
+```{python}
+#| label: setup-size
+import pandas as pd
+import plotly.express as px
+from hh.clean.accounts import clean_accounts
+from hh.clean.donations import clean_donations
+from hh.analytics.donors import annual_gifts, donors_by_size_year, TIER_LABELS
+from hh.viz import style, SEQUENTIAL_BLUE, money
+
+SIZE_COLORS = [SEQUENTIAL_BLUE[i] for i in (1, 5, 9, 12)]
+COLOR_MAP = dict(zip(TIER_LABELS, SIZE_COLORS))
+
+ag = annual_gifts(clean_donations(accounts=clean_accounts()))
+sby = donors_by_size_year(ag)
+
+# the latest year in the data is the current, partial year — keep it out of the trend
+max_year = int(ag["year"].max())
+complete_years = [y for y in sorted(ag["year"].unique()) if y < max_year]
+plot_df = sby[sby["year"].isin(complete_years)].copy()
+ytd_donors = int(sby.loc[sby["year"] == max_year, "donors"].sum())
+ytd_dollars = float(sby.loc[sby["year"] == max_year, "dollars"].sum())
+
+# lifetime tier totals (all years) for the summary table
+ltot = sby.groupby("tier").agg(donors=("donors", "sum"), dollars=("dollars", "sum")).reindex(TIER_LABELS)
+ltot["dollar share"] = ltot["dollars"] / ltot["dollars"].sum()
+```
+
+## Donors and dollars by tier, by year
+
+```{python}
+#| label: fig-size-donors
+#| fig-cap: "Active donor households by annual giving tier, by year"
+fig = px.bar(
+    plot_df,
+    x="year",
+    y="donors",
+    color="tier",
+    category_orders={"tier": TIER_LABELS, "year": complete_years},
+    color_discrete_map=COLOR_MAP,
+)
+fig.update_layout(
+    xaxis_title="Year (gift date)", yaxis_title="Donor households",
+    legend_title="Annual giving", legend=dict(orientation="h", y=-0.2),
+)
+fig.update_traces(hovertemplate="%{y:,.0f} donor-years<br>%{fullData.name}<extra></extra>")
+style(fig).show()
+```
+
+```{python}
+#| label: fig-size-dollars
+#| fig-cap: "Donated dollars by giving tier, by year"
+fig = px.bar(
+    plot_df,
+    x="year",
+    y="dollars",
+    color="tier",
+    category_orders={"tier": TIER_LABELS, "year": complete_years},
+    color_discrete_map=COLOR_MAP,
+)
+fig.update_layout(
+    xaxis_title="Year (gift date)", yaxis_title="Donated dollars",
+    legend_title="Annual giving", legend=dict(orientation="h", y=-0.2),
+)
+fig.update_yaxes(tickprefix="$", tickformat=",.0f")
+fig.update_traces(hovertemplate="%{y:$,.0f}<br>%{fullData.name}<extra></extra>")
+style(fig).show()
+```
+
+The small-donor base (under $100 a year) has grown sharply in recent years, while the number of
+households giving **$1,000 or more** in a year is small and uneven — its dollars, though, move
+the total most. The share of dollars coming from the top tiers:
+
+```{python}
+#| label: fig-size-share
+#| fig-cap: "Share of donated dollars by giving tier, by year"
+share = plot_df.assign(share=plot_df.groupby("year")["dollars"].transform(lambda s: s / s.sum()))
+fig = px.bar(
+    share, x="year", y="share", color="tier",
+    category_orders={"tier": TIER_LABELS, "year": complete_years},
+    color_discrete_map=COLOR_MAP,
+)
+fig.update_layout(
+    xaxis_title="Year (gift date)", yaxis_title="Share of donated dollars",
+    legend_title="Annual giving", legend=dict(orientation="h", y=-0.2),
+    barmode="relative",
+)
+fig.update_yaxes(tickformat=".0%", range=[0, 1])
+fig.update_traces(hovertemplate="%{y:.0%}<br>%{fullData.name}<extra></extra>")
+style(fig).show()
+```
+
+## Where the dollars concentrate
+
+Across all years combined, giving is heavily concentrated in the top tiers:
+
+```{python}
+#| label: tab-size-summary
+ltot.index.name = "Annual giving tier"
+ltot.style.format(
+    {"donors": "{:,.0f}", "dollars": money, "dollar share": "{:.0%}"}
+)
+```
+
+::: {callout-note}
+`{python} max_year` is **year-to-date** (partial year), so it is left out of the trend charts.
+So far in `{python} max_year`, **`{python} f"{ytd_donors:,}"`** donor households have given about
+**`{python} money(ytd_dollars)`** — the full-year figure will be higher.
+:::

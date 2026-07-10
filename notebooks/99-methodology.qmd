@@ -141,6 +141,27 @@ household level.
   run is that title's performances split when dates gap by more than 45 days (see
   [Reconstructing multi-day production runs](#reconstructing-multi-day-production-runs)).
 
+## Donor size and persistence
+
+- **Annual giving tiers.** A household's giving in a single year is placed in one of four bands:
+  **<$100**, **$100–999**, **$1,000–4,999**, or **$5,000+**. These drive the over-time and
+  persistence chapters. A household is counted once per year it gives (so a multi-year donor
+  appears in several years).
+- **Lifetime tiers.** Cumulative giving uses the same bands; households giving **$1,000+**
+  lifetime are "large donors" and **$5,000+** are "major donors." These drive the preferences
+  chapter, where lifetime giving measures the depth of the relationship.
+- **Donor basis.** Size and persistence start from `succeeded_individual_gifts` (status
+  `SUCCEEDED`, type `DONATION`/`PLEDBGEPAYMENT`, account type `Individual`) rolled up to the
+  household — the same basis as `households_summary.total_donations`, so the figures reconcile
+  with the headline donor counts.
+- **Retention.** Of households that gave in year Y, the share that also gave in Y+1. The
+  retention table drops the final year (it has no "next year"), and the trend drops the row whose
+  next year is the partial current year. Retention is an **upper bound on voluntary churn**: a
+  donor who has died also appears as "not retained."
+- **Partial years.** The current calendar year is year-to-date and is left out of every
+  over-time trend; where its figure is shown, it is labeled year-to-date and will rise as the
+  year fills out.
+
 ## Geography
 
 Distances are straight-line (haversine) from Hubbard Hall (25 E Main St, Cambridge NY) to each

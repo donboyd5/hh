@@ -1,0 +1,33 @@
+---
+editor_options:
+  chunk_output_type: console
+---
+
+# Questions to answer next {.appendix}
+
+A live snapshot of `TODO.md` at the repo root, kept in the appendix so the roadmap is always in
+front of us. Edit `TODO.md` and this page updates on the next render.
+
+```{python}
+#| label: todo-include
+from pathlib import Path
+from IPython.display import Markdown
+
+
+def _find_todo() -> Path:
+    # walk up from the notebook working dir to the repo root
+    for d in [Path.cwd(), *Path.cwd().parents]:
+        if (d / "TODO.md").exists():
+            return d / "TODO.md"
+    raise FileNotFoundError("TODO.md not found above notebooks/")
+
+
+_text = _find_todo().read_text()
+# this chapter supplies the appendix heading, so drop the file's own H1
+_lines = _text.splitlines()
+if _lines and _lines[0].startswith("# "):
+    _lines = _lines[1:]
+    while _lines and not _lines[0].strip():
+        _lines.pop(0)
+Markdown("\n".join(_lines))
+```
