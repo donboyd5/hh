@@ -8,13 +8,26 @@ book:
   date: today
   chapters:
     - index.qmd
-    - 01-donor-geography.qmd
-    - 02-timing.qmd
-    - 03-travel-distance.qmd
-    - 04-overlap.qmd
-    - 05-donor-attendance.qmd
+    - part: Donors
+      chapters:
+        - 01-donor-geography.qmd
+        - 06-donor-size.qmd
+        - 07-donor-persistence.qmd
+        - 08-donor-preferences.qmd
+        - 05-donor-attendance.qmd
+    - part: Performances
+      chapters:
+        - 02-timing.qmd
+        - 03-travel-distance.qmd
+    - part: Classes
+      chapters:
+        - 09-classes.qmd
+    - part: Overlap
+      chapters:
+        - 04-overlap.qmd
   appendices:
     - 99-methodology.qmd
+    - 98-todo.qmd
 
 format:
   html:

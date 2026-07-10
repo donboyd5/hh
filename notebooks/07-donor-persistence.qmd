@@ -1,0 +1,104 @@
+---
+editor_options:
+  chunk_output_type: console
+---
+
+# Are large donors going away?
+
+"Large" here means a household that gave **$1,000 or more in a single year**. This chapter tracks
+how many such households are active each year, how many donors come back year to year, and how
+many once-active donors have gone quiet. Definitions and the retention method are in
+[Methodology](99-methodology.html); the size tiers are introduced in [How has giving by donation
+size changed over time?](06-donor-size.html).
+
+```{python}
+#| label: setup-persist
+import pandas as pd
+import plotly.express as px
+from hh.io import read_parquet
+from hh.clean.accounts import clean_accounts
+from hh.clean.donations import clean_donations
+from hh.analytics.donors import (
+    annual_gifts,
+    donor_retention,
+    donors_above_threshold_by_year,
+    size_tier,
+    TIER_LABELS,
+    LARGE_DONOR_MIN,
+)
+from hh.viz import style, BLUE, pct
+
+ag = annual_gifts(clean_donations(accounts=clean_accounts()))
+hh = read_parquet("processed", "households_summary.parquet")
+
+max_year = int(ag["year"].max())                 # current, partial year
+complete_below = [y for y in sorted(ag["year"].unique()) if y < max_year]
+
+# (a) households reaching the large-donor threshold each year
+big = donors_above_threshold_by_year(ag, min_amount=LARGE_DONOR_MIN)
+big_plot = big[big["year"].isin(complete_below)]
+big_ytd = int(big.loc[big["year"] == max_year, "donors"].sum())
+
+# (b) year-over-year retention. Drop the row whose "next year" is the partial year.
+ret = donor_retention(ag)
+ret_plot = ret[ret["year"] < max_year - 1].copy()
+
+# (c) lapsed donors: ever gave, but not in the last two complete years
+recent_complete = [max_year - 1, max_year - 2]
+ever = hh[hh["is_donor"]].copy()
+recent_ids = set(ag.loc[ag["year"].isin(recent_complete), "id"])
+ever["lapsed"] = ~ever["id"].isin(recent_ids)
+lapsed = ever[ever["lapsed"]]
+n_lapsed = len(lapsed)
+lapsed_large = int((lapsed["total_donations"] >= LARGE_DONOR_MIN).sum())
+lapsed["tier"] = lapsed["total_donations"].map(size_tier)
+lapsed_by_tier = lapsed.groupby("tier")["id"].count().reindex(TIER_LABELS).fillna(0).astype(int)
+```
+
+## Large donors active each year
+
+```{python}
+#| label: fig-big-by-year
+#| fig-cap: "Households giving $1,000 or more in a year"
+fig = px.line(big_plot, x="year", y="donors", markers=True)
+fig.update_traces(line_color=BLUE, marker_color=BLUE, hovertemplate="%{x}: %{y} households<extra></extra>")
+fig.update_layout(xaxis_title="Year (gift date)", yaxis_title="Households giving $1,000+/yr")
+style(fig).show()
+```
+
+## Do donors come back?
+
+Of the donors active in one year, the share who also gave the next:
+
+```{python}
+#| label: fig-retention
+#| fig-cap: "Year-over-year donor retention"
+fig = px.line(ret_plot, x="year", y="retention", markers=True)
+fig.update_traces(line_color=BLUE, marker_color=BLUE, hovertemplate="%{x}: %{y:.0%} returned<extra></extra>")
+fig.update_layout(xaxis_title="Year (gave in …)", yaxis_title="Share who gave again next year")
+fig.update_yaxes(tickformat=".0%", range=[0, 1])
+style(fig).show()
+```
+
+## Who has gone quiet?
+
+Of the **`{python} f"{int(hh['is_donor'].sum()):,}"`** households that have ever given,
+**`{python} f"{n_lapsed:,}"`** have not given in either of the last two complete years
+(`{python} f"{recent_complete[1]}"` or `{python} f"{recent_complete[0]}"`). Of those lapsed
+households, **`{python} f"{lapsed_large:,}"`** were once large donors (gave $1,000+ in a year at
+some point). By lifetime giving tier:
+
+```{python}
+#| label: tab-lapsed-by-tier
+ldf = lapsed_by_tier.reset_index()
+ldf.columns = ["Lifetime giving tier", "Lapsed households"]
+ldf["Share of lapsed"] = ldf["Lapsed households"] / n_lapsed
+ldf.style.format({"Lapsed households": "{:,.0f}", "Share of lapsed": pct})
+```
+
+::: {callout-note}
+`{python} max_year` is **year-to-date**, so it is left out of the trends. So far in
+`{python} max_year`, **`{python} f"{big_ytd:,}"`** households have reached the $1,000+ threshold;
+the full-year count will be higher. Retention is an upper bound on voluntary churn — a donor who
+has died also appears as "not retained."
+:::

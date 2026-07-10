@@ -1,0 +1,149 @@
+---
+editor_options:
+  chunk_output_type: console
+---
+
+# What do large donors attend?
+
+Donors are split by **lifetime** giving — smaller donor (under $1,000 lifetime), large donor
+($1,000–4,999), and major donor ($5,000+) — and compared with households that have never given.
+The question is whether larger donors engage differently: do they attend more, take more classes,
+and prefer different performance genres? Attendance is **headcount** (succeeded ticket
+attendees); see [Methodology](99-methodology.html). Size tiers are defined in [How has giving by
+donation size changed over time?](06-donor-size.html); the binary donor view is in [What
+performances do donors attend?](05-donor-attendance.html).
+
+```{python}
+#| label: setup-pref
+import pandas as pd
+import plotly.express as px
+from hh.io import read_parquet
+from hh.viz import style, BLUE, CATEGORICAL, SEQUENTIAL_BLUE, pct
+from hh.analytics.productions import is_excluded, count_succeeded_attendees
+
+GROUP_ORDER = [
+    "Smaller donor (<$1,000)",
+    "Large donor ($1,000–4,999)",
+    "Major donor ($5,000+)",
+    "Non-donor",
+]
+GROUP_COLORS = {
+    "Smaller donor (<$1,000)": SEQUENTIAL_BLUE[3],
+    "Large donor ($1,000–4,999)": SEQUENTIAL_BLUE[8],
+    "Major donor ($5,000+)": SEQUENTIAL_BLUE[12],
+    "Non-donor": "#c9c7c0",
+}
+GENRES = ["theater", "music", "opera", "dance"]
+GENRE_COLORS = dict(zip(GENRES, CATEGORICAL[:4]))
+
+hh = read_parquet("processed", "households_summary.parquet")
+regs = read_parquet("processed", "registrations_enriched.parquet")
+
+
+def _lifetime_group(r):
+    if not r["is_donor"]:
+        return "Non-donor"
+    t = r["total_donations"]
+    if t >= 5000:
+        return "Major donor ($5,000+)"
+    if t >= 1000:
+        return "Large donor ($1,000–4,999)"
+    return "Smaller donor (<$1,000)"
+
+
+hh["lt_group"] = hh.apply(_lifetime_group, axis=1)
+```
+
+## How engaged is each donor tier?
+
+```{python}
+#| label: tab-engagement
+eng = (
+    hh.groupby("lt_group")
+    .agg(
+        households=("id", "count"),
+        patron_share=("is_patron", "mean"),
+        class_share=("is_class_taker", "mean"),
+        avg_perf_regs=("n_performance", "mean"),
+        avg_class_regs=("n_class", "mean"),
+    )
+    .reindex(GROUP_ORDER)
+)
+eng_show = eng.copy()
+eng_show.columns = ["Households", "Attend performances", "Take classes", "Avg performance regs", "Avg class regs"]
+eng_show.style.format(
+    {
+        "Households": "{:,.0f}",
+        "Attend performances": pct,
+        "Take classes": pct,
+        "Avg performance regs": "{:.1f}",
+        "Avg class regs": "{:.1f}",
+    }
+)
+```
+
+```{python}
+#| label: fig-engagement
+#| fig-cap: "Share of each lifetime-donor tier that attends performances or takes classes"
+eng_long = (
+    eng[["patron_share", "class_share"]]
+    .rename(columns={"patron_share": "Attend performances", "class_share": "Take classes"})
+    .reset_index()
+    .melt("lt_group", var_name="Activity", value_name="share")
+)
+fig = px.bar(
+    eng_long, x="lt_group", y="share", color="Activity", barmode="group",
+    category_orders={"lt_group": GROUP_ORDER},
+    color_discrete_map={"Attend performances": CATEGORICAL[0], "Take classes": CATEGORICAL[1]},
+)
+fig.update_layout(
+    xaxis_title="", yaxis_title="Share of households", legend_title="",
+    legend=dict(orientation="h", y=-0.25),
+)
+fig.update_yaxes(tickformat=".0%", range=[0, 1])
+fig.update_traces(hovertemplate="%{y:.0%}<extra></extra>")
+style(fig).show()
+```
+
+## Which performances draw the large-donor tiers?
+
+Performance headcount by genre, split by lifetime-donor tier:
+
+```{python}
+#| label: setup-pref-perf
+m = regs.merge(hh[["id", "lt_group"]], on="id", how="left")
+perf = m[(m["event_majorcat"] == "performance") & ~m["event_name"].map(is_excluded)].copy()
+perf["attendees"] = perf["tickets"].map(count_succeeded_attendees)
+
+gxg = perf.groupby(["lt_group", "event_minorcat"])["attendees"].sum().unstack(fill_value=0)
+gxg = gxg.reindex(columns=GENRES).fillna(0)
+genre_mix = gxg.div(gxg.sum(axis=1), axis=0).reindex(GROUP_ORDER)
+```
+
+```{python}
+#| label: fig-genre-mix
+#| fig-cap: "Performance-genre mix within each lifetime-donor tier"
+mix_long = genre_mix.reset_index().melt("lt_group", var_name="genre", value_name="share")
+fig = px.bar(
+    mix_long, x="lt_group", y="share", color="genre",
+    category_orders={"lt_group": GROUP_ORDER, "genre": GENRES},
+    color_discrete_map=GENRE_COLORS,
+)
+fig.update_layout(
+    xaxis_title="", yaxis_title="Share of performance attendance",
+    legend_title="Genre", legend=dict(orientation="h", y=-0.25),
+    barmode="relative",
+)
+fig.update_yaxes(tickformat=".0%", range=[0, 1])
+fig.update_traces(hovertemplate="%{y:.0%} %{fullData.name}<extra></extra>")
+style(fig).show()
+```
+
+::: {callout-note}
+Major donors are the most likely to attend performances
+(**`{python} f"{eng.loc['Major donor ($5,000+)', 'patron_share']:.0%}"`** of them are patrons) and
+the most likely to take classes
+(**`{python} f"{eng.loc['Major donor ($5,000+)', 'class_share']:.0%}"`**). The genres they attend
+mirror the rest of the audience — theater first — but opera and music take a noticeably larger
+share of their attendance than of non-donors'.
+:::

@@ -50,16 +50,45 @@ _perf = regs[(regs["event_majorcat"] == "performance") & ~regs["event_name"].map
 _perf["attendees"] = _perf["tickets"].map(count_succeeded_attendees)
 _don = _perf.merge(households[["id", "is_donor"]], on="id", how="left")
 donor_att_share = f"{_don.loc[_don['is_donor'].fillna(False), 'attendees'].sum() / _don['attendees'].sum():.0%}"
+
+# donor concentration & persistence (new donor chapters)
+from hh.clean.accounts import clean_accounts
+from hh.clean.donations import clean_donations
+from hh.analytics.donors import annual_gifts, donor_retention
+
+_dt = households.loc[households["is_donor"], "total_donations"]
+large_donor_share = f"{(_dt >= 1000).mean():.0%}"
+large_dollar_share = f"{_dt[_dt >= 1000].sum() / _dt.sum():.0%}"
+
+_ag = annual_gifts(clean_donations(accounts=clean_accounts()))
+_max_year = int(_ag["year"].max())
+_ret = donor_retention(_ag)
+_ret = _ret[_ret["year"] < _max_year - 1]   # drop the row whose next year is the partial current year
+_ret_year = int(_ret["year"].iloc[-1])
+_recent_ret = f"{_ret['retention'].iloc[-1]:.0%}"
 ```
+
+::: {callout-important}
+## Sunday is becoming the best-attended day
+
+Within a theater run that plays Friday, Saturday, and Sunday, Saturday has long looked busiest —
+but mainly because it usually stages two shows. **Per performance the three days are essentially
+tied, and since 2021 Sunday has drawn the most attendees per show in nearly every full-weekend
+run.** Details in [When do people come to Hubbard Hall?](02-timing.html).
+:::
 
 - **Donors are local.** About **`{python} within10`** of donated dollars come from within 10 miles
   of Hubbard Hall (`{python} within5` within 5 miles; `{python} within20` within 20 miles).
-- **Theater draws on Saturday; music on Sunday.** But within a theater run that plays
-  Fri/Sat/Sun, Saturday leads only because it usually has two shows — per performance the three
-  days are essentially tied, and Saturday matinees are the weekend's weakest slot. The ranking
-  is shifting: since 2021, Sunday has been the best-attended day per performance in nearly every
-  full-weekend run. Details are in
-  [When people come to Hubbard Hall](02-timing.html).
+- **Giving is concentrated.** Donors who have given **$1,000 or more** lifetime are just
+  `{python} large_donor_share` of donor households, but account for
+  **`{python} large_dollar_share`** of all donated dollars. See
+  [How has giving by donation size changed over time?](06-donor-size.html).
+- **Donor retention:** of donors active in `{python} f"{_ret_year}"`,
+  **`{python} _recent_ret`** gave again the next year. See
+  [Are large donors going away?](07-donor-persistence.html).
+- **Theater draws on Saturday; music on Sunday.** Saturday looks busiest mainly because it
+  usually stages two shows, and Saturday matinees are the weekend's weakest slot. Details are in
+  [When do people come to Hubbard Hall?](02-timing.html).
 - **Classes are local; performances are regional.** `{python} class_w10` of class registrations
   come from within 10 miles, versus `{python} theater_w10` for theater — and Sunday draws the
   farthest-traveling theater audience. See
