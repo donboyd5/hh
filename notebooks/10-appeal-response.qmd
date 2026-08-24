@@ -1,0 +1,153 @@
+---
+editor_options:
+  chunk_output_type: console
+---
+
+# Who responded to the FY26 annual appeal?
+
+The fall 2025 annual appeal was mailed to about 1,100 households — nearly all of them
+prior donors. A household **responded** if anyone in it gave a SUCCEEDED gift to the
+*Annual Fund Drive - 2025-2026* campaign between October 1, 2025 and January 31, 2026.
+Giving and engagement are counted the same way as everywhere in this book: rolled up to
+the household, with engagement measured only for events that had happened before the
+appeal mailed (see [Methodology](99-methodology.html)).
+
+```{python}
+#| label: setup-appeal
+import pandas as pd
+import plotly.express as px
+from hh.analytics.appeal import response_summary
+from hh.analytics.donors import TIER_LABELS
+from hh.io import read_parquet
+from hh.viz import fmt_gift, money, pct, style, SEQUENTIAL_BLUE
+
+t = read_parquet("processed", "appeal_households.parquet")
+ap = t[t["appealed"]].copy()
+n_universe = len(t)
+n_appealed = len(ap)
+n_responded = int(ap["responded"].sum())
+resp_rate = n_responded / n_appealed
+responder_gifts = ap.loc[ap["responded"], "afd_amount"]
+resp_dollars = responder_gifts.sum()
+median_gift = responder_gifts.median()
+campaign_total = t["afd_amount"].sum()
+
+not_appealed = t[~t["appealed"]]
+n_not_appealed = len(not_appealed)
+prior_donor_share_appealed = ap["prior_donor"].mean()
+prior_donor_share_not = not_appealed["prior_donor"].mean()
+arts_share_not = (not_appealed["eng_n_performance"] > 0).mean()
+class_share_not = (not_appealed["eng_n_class"] > 0).mean()
+
+
+def _fmt(raw: pd.DataFrame) -> pd.DataFrame:
+    return raw.rename(
+        columns={
+            "households": "Households", "responded": "Gave", "rate": "Response rate",
+            "dollars": "Total $", "avg_gift": "Avg gift", "median_gift": "Median gift",
+        }
+    ).assign(
+        **{
+            "Response rate": lambda d: d["Response rate"].map(pct),
+            "Total $": lambda d: d["Total $"].map(money),
+            "Avg gift": lambda d: fmt_gift(d["Avg gift"]),
+            "Median gift": lambda d: fmt_gift(d["Median gift"]),
+        }
+    )
+
+
+def display_summary(df, by, order=None, total=True):
+    """response_summary for display, with a totals row (overall rate, responder-level
+    avg/median — not averages of the group rows)."""
+    raw = response_summary(df, by).set_index(by)
+    if order is not None:
+        raw = raw.reindex(order)
+    parts = [_fmt(raw.reset_index())]
+    if total:
+        grand = response_summary(df.assign(**{"_total": "Total"}), "_total")
+        parts.append(_fmt(grand.rename(columns={"_total": by})))
+    return pd.concat(parts, ignore_index=True)
+```
+
+**`{python} f"{n_responded:,}"` of `{python} f"{n_appealed:,}"` appealed households
+responded (`{python} pct(resp_rate)`)**, giving
+`{python} money(resp_dollars)` of the
+`{python} money(campaign_total)` donated to the campaign during the window. The median
+responding household gave `{python} money(median_gift)`.
+
+## Response by prior giving
+
+Prior giving is each household's lifetime total before October 1, 2025, in the same
+four tiers as [Are large donors going away?](07-donor-persistence.html).
+
+```{python}
+#| label: fig-appeal-tier
+#| fig-cap: "Response rate by prior-lifetime-giving tier"
+ap["prior tier"] = ap["prior_size_tier"].fillna("never gave")
+tier_order = TIER_LABELS + ["never gave"]
+by_tier = response_summary(ap, "prior tier").set_index("prior tier").reindex(tier_order)
+
+fig = px.bar(by_tier.reset_index(), x="prior tier", y="rate")
+fig.update_traces(
+    texttemplate=[pct(r) for r in by_tier["rate"]], textposition="outside",
+    marker_color=SEQUENTIAL_BLUE[7],
+)
+fig.update_layout(
+    xaxis_title="Prior lifetime giving", yaxis_title="Share of households that responded",
+    yaxis_tickformat=".0%",
+)
+style(fig).show()
+```
+
+```{python}
+display_summary(ap, "prior tier", order=tier_order)
+```
+
+## Response by giving recency
+
+```{python}
+# a true partition of the appealed households (lapsed donors are a subset of
+# "not in FY25", so the middle row excludes them to keep the groups disjoint)
+groups = [
+    ("gave in FY25 (year before appeal)", ap["prior_fy_donor"].fillna(False)),
+    (
+        "gave within 24 months, before FY25",
+        ap["prior_donor"] & ~ap["prior_fy_donor"].fillna(False) & ~ap["lapsed_donor"].fillna(False),
+    ),
+    ("lapsed 24+ months", ap["lapsed_donor"].fillna(False)),
+    ("never gave", ~ap["prior_donor"].fillna(False)),
+]
+status = pd.concat([ap[m].assign(**{"giving status": label}) for label, m in groups])
+display_summary(status, "giving status", order=[g[0] for g in groups])
+```
+
+## Response by engagement before the appeal
+
+Engagement profiles count only events that **started** by September 30, 2025 —
+registering in September for a November show does not count.
+
+```{python}
+profile_order = ["arts+class", "arts", "class", "community/other", "none"]
+display_summary(ap, "eng_profile", order=profile_order)
+```
+
+## Response by distance from the Hall
+
+```{python}
+BAND_LABELS = {
+    "[0, 1)": "0–1 mi", "[1, 5)": "1–5 mi", "[5, 10)": "5–10 mi",
+    "[10, 20)": "10–20 mi", "[20, ∞)": "20+ mi",
+}
+ap["miles"] = ap["distance_band"].map(BAND_LABELS)
+display_summary(ap, "miles", order=list(BAND_LABELS.values()))
+```
+
+## Households that were not appealed
+
+Of the `{python} f"{n_universe:,}"` households in the database,
+`{python} f"{n_not_appealed:,}"` were not appealed. The mailing list was
+overwhelmingly the donor file:
+`{python} pct(prior_donor_share_appealed)` of appealed households had given before,
+versus `{python} pct(prior_donor_share_not)` of those not appealed. Among the
+not-appealed, `{python} pct(arts_share_not)` had attended performances and
+`{python} pct(class_share_not)` had taken classes before the appeal.

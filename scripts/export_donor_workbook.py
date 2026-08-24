@@ -6,6 +6,7 @@ Writes data/20_processed/hh-donor-workbook.xlsx (gitignored) with three sheets:
                   response, prior-giving history, engagement, and Boyd notes
   silent-1000plus prior $1,000+ appealed households that did not respond (the
                   analysis-site table, uncapped), with Boyd notes
+  mailing-list-notes  staff notes typed next to recipients in the appeal workbook
   about           definitions, sources, and build info
 
 Run after `scripts/build.py`. Notes come from data/30_external/boyd-notes.yaml
@@ -28,6 +29,7 @@ OUTPUT = "hh-donor-workbook.xlsx"
 
 MONEY_COLS = [
     "lifetime before appeal", "last-gift-yr $", "appeal gifts $", "FY25 giving $",
+    "recorded gift $",
 ]
 
 
@@ -89,6 +91,16 @@ def build_sheets() -> dict[str, pd.DataFrame]:
         }
     ).sort_values("lifetime before appeal", ascending=False)
 
+    rec = io.read_parquet("processed", "appeal_recipients.parquet")
+    mail_notes = rec[rec["staff_notes"].notna()][
+        ["workbook_name", "source_sheet", "appeal_gift_recorded", "staff_notes"]
+    ].rename(
+        columns={
+            "workbook_name": "household", "source_sheet": "sheet",
+            "appeal_gift_recorded": "recorded gift $", "staff_notes": "staff note",
+        }
+    )
+
     about = pd.DataFrame(
         {
             "item": [
@@ -121,7 +133,12 @@ def build_sheets() -> dict[str, pd.DataFrame]:
             ],
         }
     )
-    return {"donors": donors, "silent-1000plus": silent, "about": about}
+    return {
+        "donors": donors,
+        "silent-1000plus": silent,
+        "mailing-list-notes": mail_notes,
+        "about": about,
+    }
 
 
 def write_workbook(sheets: dict[str, pd.DataFrame]) -> None:

@@ -15,6 +15,7 @@ book:
         - 07-donor-persistence.qmd
         - 08-donor-preferences.qmd
         - 05-donor-attendance.qmd
+        - 10-appeal-response.qmd
     - part: Performances
       chapters:
         - 02-timing.qmd
