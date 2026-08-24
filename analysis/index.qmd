@@ -9,7 +9,8 @@ editor_options:
 #| label: setup-index
 import pandas as pd
 from hh.io import read_parquet
-from hh.viz import money, pct
+from hh.analytics.appeal import response_summary
+from hh.viz import money, pct, fmt_gift
 
 rec = read_parquet("processed", "appeal_recipients.parquet")
 t = read_parquet("processed", "appeal_households.parquet")
@@ -26,6 +27,21 @@ median_gift = responder_gifts.median()
 largest_gift = ap["afd_amount"].max()
 rate_5k = ap.loc[ap["prior_size_tier"] == "$5,000+", "responded"].mean()
 rate_100 = ap.loc[ap["prior_size_tier"] == "<$100", "responded"].mean()
+
+
+def display_summary(df: pd.DataFrame, by: str) -> pd.DataFrame:
+    """response_summary with compact, consistently labeled columns for the tables."""
+    out = response_summary(df, by).rename(
+        columns={
+            "households": "HH", "responded": "gave", "dollars": "total $",
+            "avg_gift": "avg gift", "median_gift": "median gift",
+        }
+    )
+    out["rate"] = out["rate"].map(pct)
+    out["total $"] = out["total $"].map(money)
+    out["avg gift"] = fmt_gift(out["avg gift"])
+    out["median gift"] = fmt_gift(out["median gift"])
+    return out
 ```
 
 ::: {.callout-warning}
@@ -56,17 +72,7 @@ The mailing had three parts: a segmented letter to top prospects, a tailored
 letter to theater artists, and a general letter to everyone else.
 
 ```{python}
-seg = (
-    ap.groupby("appeal_segment", observed=True)
-    .agg(
-        households=("id", "count"),
-        responded=("responded", "sum"),
-        dollars=("afd_amount", "sum"),
-    )
-    .sort_values("households", ascending=False)
-)
-seg["response rate"] = (seg["responded"] / seg["households"]).map(pct)
-seg["dollars"] = seg["dollars"].map(money)
+seg = display_summary(ap, "appeal_segment").sort_values("HH", ascending=False)
 seg
 ```
 
