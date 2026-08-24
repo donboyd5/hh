@@ -1,0 +1,158 @@
+---
+editor_options:
+  chunk_output_type: console
+---
+
+# Do the staff spreadsheets reconcile with Neon?
+
+Three records exist of FY26 appeal giving. They measure different things at
+different times; Neon (pulled July 2026, after the campaign closed) is the
+source of truth for every response flag in this site.
+
+```{python}
+#| label: setup-recon
+import pandas as pd
+from hh.clean.accounts import clean_accounts
+from hh.clean.donations import clean_donations
+from hh.external.appeal import appeal_load_qa, load_appeal_sheets
+from hh.analytics.appeal import reconcile_eoy_export
+from hh.io import read_parquet
+from hh.viz import money, pct
+
+rec = read_parquet("processed", "appeal_recipients.parquet")
+t = read_parquet("processed", "appeal_households.parquet")
+eoy = read_parquet("processed", "eoy_export_gifts.parquet")
+qa = appeal_load_qa(load_appeal_sheets(), rec)
+```
+
+## Three totals
+
+```{python}
+totals = pd.DataFrame(
+    {
+        "source": [
+            "appeal workbook ('Annual Appeal Donation' column)",
+            "End-of-year export (gifts through Jan 7)",
+            "Neon pull, July 2026 (campaign, Oct 1 – Jan 31, SUCCEEDED)",
+        ],
+        "gifts": [int(rec["appeal_gift_recorded"].notna().sum()), len(eoy), int(t["afd_n_gifts"].sum())],
+        "dollars": [qa["recorded_gift_total"], eoy["donation_amount"].sum(), t["afd_amount"].sum()],
+    }
+)
+totals["dollars"] = totals["dollars"].map(money)
+totals
+```
+
+Mechanical differences between the cuts:
+
+- the export stops January 7, 2026; the workbook column and Neon include later January gifts
+- Neon excludes canceled gifts; the workbook column includes whatever staff recorded
+- `{python} f"{int((t['responded'] & ~t['appealed']).sum())}"` households gave to the campaign
+  without being on the mailing list (next section names them)
+- the workbook credits `{python} f"{qa['missing_id_with_recorded_gift']}"` donors who have no
+  Neon id anywhere on their row (below)
+
+## Appeal-list load QA
+
+What was dropped when cleaning the workbook's `{python} f"{sum(qa['rows_read'].values()):,}"` raw rows:
+
+```{python}
+load_qa = pd.DataFrame(
+    {
+        "sheet": list(qa["rows_read"]),
+        "rows read": list(qa["rows_read"].values()),
+        "subtotal/Total/placeholder/blank dropped": list(qa["rows_dropped"].values()),
+        "exact duplicates dropped": list(qa["duplicate_rows"].values()),
+        "rows kept": [qa["rows_kept"].get(s, 0) for s in qa["rows_read"]],
+    }
+)
+load_qa
+```
+
+Kept rows: `{python} f"{len(rec):,}"`, covering `{python} f"{qa['unique_account_ids']:,}"`
+unique Neon accounts.
+
+## Recipients with no Neon id
+
+These rows have a name (and for some, a recorded gift) but no account id, no
+household id, no address, and no email — they cannot be linked to Neon as-is.
+
+```{python}
+no_id = rec[rec["missing_account_id"]][
+    ["workbook_name", "source_sheet", "appeal_segment", "appeal_gift_recorded"]
+].rename(
+    columns={
+        "workbook_name": "household", "source_sheet": "sheet",
+        "appeal_segment": "segment", "appeal_gift_recorded": "recorded gift",
+    }
+).reset_index(drop=True)
+no_id["recorded gift"] = no_id["recorded gift"].map(money)
+no_id
+```
+
+## Recipient accounts that no longer exist in Neon
+
+```{python}
+accounts = clean_accounts()
+donations = clean_donations(accounts=accounts)
+missing_acct = rec[rec["account_id"].notna() & ~rec["account_id"].isin(set(accounts["account_id"]))]
+missing_acct = missing_acct[
+    ["workbook_name", "source_sheet", "workbook_hhid", "appeal_gift_recorded"]
+].rename(
+    columns={
+        "workbook_name": "household", "source_sheet": "sheet",
+        "workbook_hhid": "workbook hhid", "appeal_gift_recorded": "recorded gift",
+    }
+).reset_index(drop=True)
+missing_acct["recorded gift"] = missing_acct["recorded gift"].map(money)
+missing_acct
+```
+
+`{python} f"{len(missing_acct)}"` recipient rows point at accounts that were deleted or
+merged away in Neon. Where the workbook's household id still names a live household,
+the household-level table keeps them through that fallback.
+
+## End-of-year export vs Neon
+
+```{python}
+r = reconcile_eoy_export(eoy, donations, accounts)
+match_counts = r["match_method"].value_counts().rename_axis("match method").reset_index(name="gifts")
+match_counts
+```
+
+Every export row matched a Neon account —
+`{python} f"{int((r['match_method'] == 'email').sum())}"` by email,
+`{python} f"{int((r['match_method'] == 'name-zip').sum())}"` by first+last name and ZIP.
+But `{python} f"{int(r['neon_afd_n_gifts'].isna().sum())}"` matched households show **no**
+campaign gift in Neon's window — those gifts are recorded under a different campaign
+(or the gift is missing from Neon). They are:
+
+```{python}
+odd = r[r["matched_rollup_id"].notna() & r["neon_afd_n_gifts"].isna()]
+odd = odd[
+    ["donor_first", "donor_last", "donation_date", "donation_amount", "source", "matched_rollup_id"]
+].rename(
+    columns={
+        "donor_first": "first", "donor_last": "last", "donation_date": "date",
+        "donation_amount": "export amount", "source": "source", "matched_rollup_id": "neon household",
+    }
+).reset_index(drop=True)
+odd["export amount"] = odd["export amount"].map(money)
+odd
+```
+
+And the export rows that matched a household **not on the appeal list**:
+
+```{python}
+not_on_list = r[r["matched_rollup_id"].isin(set(t.loc[~t["appealed"], "id"]))]
+not_on_list = not_on_list[
+    ["donor_first", "donor_last", "donation_date", "donation_amount", "neon_afd_amount"]
+].rename(
+    columns={
+        "donor_first": "first", "donor_last": "last", "donation_date": "date",
+        "donation_amount": "export amount", "neon_afd_amount": "neon campaign gifts in window",
+    }
+).reset_index(drop=True)
+not_on_list["export amount"] = not_on_list["export amount"].map(money)
+not_on_list
+```

@@ -32,6 +32,8 @@ R_hhfrc/
 # =============================================================================
 # Quarto / build output
 # =============================================================================
+# `_web/` also covers analysis/_web/ — the LOCAL-ONLY appeal site render output.
+# Never `quarto publish` the analysis/ project; it contains household names.
 _web/
 .quarto/
 

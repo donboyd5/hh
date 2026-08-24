@@ -1,0 +1,32 @@
+# =============================================================================
+# LOCAL ONLY — this site names households (donors, non-donors, addresses).
+# Render with `quarto render analysis`; NEVER `quarto publish` it.
+# The public book lives in notebooks/ and stays aggregate-only.
+# =============================================================================
+project:
+  type: website
+  output-dir: _web
+
+website:
+  title: "Hubbard Hall — FY26 fall appeal (local analysis)"
+  sidebar:
+    contents:
+      - index.qmd
+      - 01-response-overview.qmd
+      - 02-who-responded.qmd
+      - 03-not-appealed.qmd
+      - 04-reconciliation.qmd
+      - 99-methodology.qmd
+
+format:
+  html:
+    theme: cosmo
+    toc: true
+    code-fold: true
+    fig-width: 8
+    fig-height: 4.5
+
+jupyter: hh
+
+execute:
+  warning: false
