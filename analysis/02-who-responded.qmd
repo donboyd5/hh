@@ -1,0 +1,113 @@
+---
+editor_options:
+  chunk_output_type: console
+---
+
+# What distinguishes responders from non-responders?
+
+::: {.callout-warning}
+The tables on this page name households — local only.
+:::
+
+Cross-cuts of the appealed households, then two named lists: the biggest
+responses, and the higher-tier prior donors who did **not** respond.
+
+```{python}
+#| label: setup-who
+import pandas as pd
+from hh.io import read_parquet
+from hh.viz import money, pct
+
+t = read_parquet("processed", "appeal_households.parquet")
+ap = t[t["appealed"]].copy()
+
+n_big_silent = int((ap["prior_donor"] & ~ap["responded"]).sum())
+big_total = ap.loc[ap["prior_donor"] & ~ap["responded"], "prior_lifetime_amount"].sum()
+n_5k_silent = int(
+    (ap["prior_donor"] & ~ap["responded"] & (ap["prior_lifetime_amount"] >= 5000)).sum()
+)
+top_dollars = ap.nlargest(25, "afd_amount")["afd_amount"].sum()
+top_share = top_dollars / ap["afd_amount"].sum()
+```
+
+## Prior giving × engagement
+
+Cells show appealed households and, in parentheses, the share that responded.
+
+```{python}
+cross = pd.crosstab(
+    ap["prior_donor"].map({True: "prior donor", False: "never gave"}),
+    ap["eng_profile"],
+)
+rates = pd.crosstab(
+    ap["prior_donor"].map({True: "prior donor", False: "never gave"}),
+    ap["eng_profile"],
+    values=ap["responded"],
+    aggfunc="mean",
+)
+(cross.astype(str) + " (" + rates.map(pct) + ")").rename_axis(index=None).rename_axis(
+    columns="engagement"
+)
+```
+
+## Biggest responses
+
+The top `{python} f"{25:,}"` responding households gave `{python} money(top_dollars)`
+— `{python} pct(top_share)` of all appeal-window dollars from appealed households.
+
+```{python}
+cols = ["name", "appeal_segment", "prior_size_tier", "afd_n_gifts", "afd_amount", "city"]
+top = ap[ap["responded"]].nlargest(25, "afd_amount")[cols].reset_index(drop=True)
+top = top.rename(
+    columns={
+        "name": "household", "appeal_segment": "segment", "prior_size_tier": "prior tier",
+        "afd_n_gifts": "gifts", "afd_amount": "appeal gifts", "city": "town",
+    }
+)
+top["appeal gifts"] = top["appeal gifts"].map(money)
+top
+```
+
+## Prior $1,000+ households that did not respond
+
+In total, `{python} f"{n_big_silent:,}"` prior-donor households with
+`{python} money(big_total)` of lifetime giving before the appeal did not respond —
+including `{python} f"{n_5k_silent}"` in the `$5,000+` lifetime tier. The 25 largest
+of those:
+
+```{python}
+big_silent = ap[
+    ap["prior_donor"] & ~ap["responded"] & (ap["prior_lifetime_amount"] >= 1000)
+].nlargest(25, "prior_lifetime_amount")
+big_silent = big_silent[
+    ["name", "appeal_segment", "prior_lifetime_amount", "prior_last_gift", "eng_profile", "city"]
+].rename(
+    columns={
+        "name": "household", "appeal_segment": "segment",
+        "prior_lifetime_amount": "lifetime before appeal", "prior_last_gift": "last gift",
+        "eng_profile": "engagement", "city": "town",
+    }
+).reset_index(drop=True)
+big_silent["lifetime before appeal"] = big_silent["lifetime before appeal"].map(money)
+big_silent
+```
+
+## Staff notes on the mailing list
+
+Notes typed into the workbook next to recipients — returned mail, deceased
+flags, sustaining-donor markers.
+
+```{python}
+rec = read_parquet("processed", "appeal_recipients.parquet")
+notes = rec[rec["staff_notes"].notna()][
+    ["workbook_name", "source_sheet", "appeal_gift_recorded", "staff_notes"]
+].reset_index(drop=True)
+notes = notes.rename(
+    columns={
+        "workbook_name": "household", "source_sheet": "sheet",
+        "appeal_gift_recorded": "recorded gift", "staff_notes": "note",
+    }
+)
+notes["recorded gift"] = notes["recorded gift"].map(money)
+notes
+```

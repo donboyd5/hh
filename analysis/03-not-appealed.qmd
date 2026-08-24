@@ -1,0 +1,104 @@
+---
+editor_options:
+  chunk_output_type: console
+---
+
+# Which households were never appealed, and what distinguishes them?
+
+```{python}
+#| label: setup-skipped
+import pandas as pd
+from hh.io import read_parquet
+from hh.viz import money, pct
+
+t = read_parquet("processed", "appeal_households.parquet")
+skip = t[~t["appealed"]].copy()
+n_appealed = int(t["appealed"].sum())
+```
+
+::: {.callout-warning}
+The tables on this page name households — local only.
+:::
+
+The universe is all `{python} f"{len(t):,}"` household rollups in the Neon pull.
+Of these, `{python} f"{n_appealed:,}"` (`{python} pct(n_appealed / len(t))`)
+got the appeal. This page profiles the rest.
+
+## Engagement profile: appealed vs not
+
+`eng_profile` counts only activity before the appeal mailed (events starting
+on or before September 30, 2025); `none` means no registrations at all before
+the appeal.
+
+```{python
+mix = pd.crosstab(t["eng_profile"], t["appealed"])
+mix.columns = ["not appealed", "appealed"]
+mix["not-appealed share"] = (mix["not appealed"] / mix["not appealed"].sum()).map(pct)
+mix["appealed share"] = (mix["appealed"] / mix["appealed"].sum()).map(pct)
+mix
+```
+
+## Donor status of the not-appealed
+
+```{python}
+rows = []
+for label, mask in [
+    ("prior donors (gave before the appeal)", skip["prior_donor"]),
+    ("gave in FY25", skip["prior_fy_donor"]),
+    ("gave to the FY26 appeal campaign anyway", skip["responded"]),
+    ("deceased (any member)", skip["deceased_any"]),
+    ("do-not-contact (any member)", skip["dnc_any"]),
+    ("no mailing address on file", ~skip["has_mail"]),
+]:
+    part = skip[mask.fillna(False)]
+    rows.append(
+        {
+            "group": label,
+            "households": len(part),
+            "share of not-appealed": pct(len(part) / len(skip)),
+            "lifetime giving before appeal": money(part["prior_lifetime_amount"].sum()),
+        }
+    )
+pd.DataFrame(rows)
+```
+
+## Prior donors who were not appealed
+
+```{python}
+donors_skipped = skip[skip["prior_donor"]].nlargest(25, "prior_lifetime_amount")
+donors_skipped = donors_skipped[
+    ["name", "prior_lifetime_amount", "prior_last_gift", "eng_profile", "has_mail", "dnc_any", "city"]
+].rename(
+    columns={
+        "name": "household", "prior_lifetime_amount": "lifetime before appeal",
+        "prior_last_gift": "last gift", "eng_profile": "engagement",
+        "has_mail": "has address", "dnc_any": "DNC", "city": "town",
+    }
+).reset_index(drop=True)
+donors_skipped["lifetime before appeal"] = donors_skipped["lifetime before appeal"].map(money)
+donors_skipped
+```
+
+## Households that gave to the campaign without being appealed
+
+```{python}
+gave_unasked = skip[skip["responded"]].nlargest(10, "afd_amount")
+gave_unasked = gave_unasked[["name", "afd_amount", "afd_company_gift", "city"]].rename(
+    columns={"name": "household", "afd_amount": "campaign gifts in window",
+             "afd_company_gift": "company gift", "city": "town"}
+).reset_index(drop=True)
+gave_unasked["campaign gifts in window"] = gave_unasked["campaign gifts in window"].map(money)
+gave_unasked
+```
+
+## Where the not-appealed live
+
+```{python}
+dist = (
+    skip.groupby("distance_band", observed=True)
+    .agg(households=("id", "count"), prior_donor_households=("prior_donor", "sum"))
+    .reset_index()
+)
+dist["prior-donor share"] = (dist["prior_donor_households"] / dist["households"]).map(pct)
+dist
+```

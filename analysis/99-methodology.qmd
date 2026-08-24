@@ -1,0 +1,87 @@
+# Methodology — FY26 fall appeal analysis
+
+This site is generated from the same Neon pull and pipeline as the public book,
+plus two staff-maintained workbooks. It is **local only**: its tables name
+households and giving amounts, so it is never published.
+
+## Sources
+
+1. **Neon CRM pull `pull-20260707T150858Z`** (July 7, 2026) — accounts,
+   donations, events, registrations. The pull postdates the appeal, so it
+   contains the campaign's complete record; it is the **donation source of
+   truth** everywhere in this site.
+2. **`Fall Appeal 2025 L With Donations.xlsx`** (`data/30_external/`) — the
+   mailing list: three sheets ("top" segmented prospects, "gen" general list,
+   "theater appeal to artists"). Supplies *who was appealed* and the staff
+   segment labels; its `Annual Appeal Donation` column is a staff tally used
+   only on the [reconciliation](04-reconciliation.html) page.
+3. **`End of Yr Campaign Donations FY26.xlsx`** (`data/30_external/`) — a
+   mid-campaign export (through January 7, 2026), used only for
+   reconciliation.
+
+Each external file's checksum, size, and mtime are recorded in
+`data/manifest/external-*.yaml`; the build logs row-level QA counts to
+`data/manifest/run_log.jsonl`.
+
+## Definitions
+
+- **Household** — the same rollup as the public book: the Neon household id
+  when the account belongs to one, otherwise the account id. 4,598 rollups in
+  this pull. Neon households are *current-state*: a couple merged after the
+  appeal is treated as one household throughout.
+- **Appealed** — the household maps (through any member account, or the
+  workbook's household id when the account was deleted) to a kept row of the
+  appeal workbook: 1,039 households.
+- **Responded** — at least one SUCCEEDED `DONATION`/`PLEDBGEPAYMENT` gift to
+  campaign *Annual Fund Drive - 2025-2026* dated 2025-10-01 through
+  2026-01-31, on **any account in the household** (the mailing went to one
+  member; the gift often arrives on another's account — 21 of the 114
+  responding households gave only through a non-mailed member).
+- **Prior giving** — lifetime SUCCEEDED individual gifts before 2025-10-01,
+  with FY25 = 2024-07-01 … 2025-06-30, the same four size tiers as the public
+  book, and "lapsed" = no gift in the 24 months before the appeal. Company
+  gifts are excluded from prior giving (the single company campaign gift is
+  flagged, not counted, as a response amount context).
+- **Engagement as of the appeal** — registrations for events that *started*
+  on or before 2025-09-30, binned as arts (performances), class, both,
+  community/other only, or none. Event start date — not registration date —
+  is the cutoff, so buying in September for a November show does not count.
+  The public book's `households_summary` counts are all-time and are never
+  used here.
+
+## Workbook cleaning rules
+
+Per sheet, in order: drop fully blank rows; drop nameless/id-less subtotal
+rows and `Total` rows; drop the literal `'Not on List'` placeholder; coerce
+Excel float ids to Neon's string form; derive segment (`top` passthrough,
+`gen` → *general*, `theater` → *theater-artists*); concatenate staff notes
+from headerless trailing columns; drop exact duplicate rows. Kept rows retain
+their workbook row number (`excel_row`) for traceability. 1,077 rows / 1,072
+unique accounts survive.
+
+The top sheet's column-A `id` is legacy numbering, not a Neon id — all joins
+use `accountid`.
+
+## Known limitations
+
+- 34 recipient account ids no longer exist in Neon (deleted/merged); where
+  possible they are kept via the workbook household id, flagged
+  `appeal_matched_in_neon = False`.
+- 4 recipients (Neubohn, Ansong, Shaw, Sipperly & Wiebe — together
+  $3,576.85 recorded) have no id, address, or email on their rows and cannot
+  be linked; they appear only on the reconciliation page.
+- Response is **not** attribution: a household that gave in the window might
+  have given without the letter. Households that gave in the window without
+  being appealed are listed separately rather than folded into response.
+- Anonymous gifts (2 in the export) are matched by the email/name on the
+  account record, not by the anonymous flag.
+
+## Future work
+
+- Put the appeal in the context of each household's **total FY giving**
+  (fiscal year ends June 30). The July 2026 pull already contains all of
+  FY26, so no re-pull is needed; a fiscal-year aggregation of the existing
+  donation table is enough.
+- A fresh Neon pull would capture FY27-to-date and account changes since
+  July 2026; pulls are additive (new timestamped directory + manifest), so
+  this never disturbs the current analysis.

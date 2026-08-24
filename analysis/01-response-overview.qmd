@@ -1,0 +1,157 @@
+---
+editor_options:
+  chunk_output_type: console
+---
+
+# How many appealed households gave, and how much?
+
+```{python}
+#| label: setup-overview
+import pandas as pd
+import plotly.express as px
+from hh.io import read_parquet
+from hh.analytics.donors import TIER_LABELS
+from hh.viz import style, money, pct, SEQUENTIAL_BLUE, CATEGORICAL
+
+t = read_parquet("processed", "appeal_households.parquet")
+ap = t[t["appealed"]].copy()
+n_appealed = len(ap)
+```
+
+Response rates and dollars for the `{python} f"{n_appealed:,}"` appealed households,
+cut by prior giving, engagement, and geography. Every cut counts the same thing:
+a household is a **responder** if it gave to the FY26 annual-fund campaign in the
+Oct 2025 – Jan 2026 window.
+
+## Response by prior-giving tier
+
+Prior giving = lifetime SUCCEEDED individual gifts **before October 1, 2025**,
+rolled up to the household, in the same four tiers the public book uses.
+
+```{python}
+#| label: fig-rate-by-tier
+#| fig-cap: "Response rate by prior-lifetime-giving tier (never-donors shown separately)"
+tiers = TIER_LABELS + ["never gave"]
+rows = []
+for tier in TIER_LABELS:
+    part = ap[ap["prior_size_tier"] == tier]
+    rows.append(
+        {
+            "prior giving": tier,
+            "households": len(part),
+            "responded": int(part["responded"].sum()),
+            "rate": part["responded"].mean(),
+            "dollars": part["afd_amount"].sum(),
+        }
+    )
+part = ap[~ap["prior_donor"]]
+rows.append(
+    {
+        "prior giving": "never gave",
+        "households": len(part),
+        "responded": int(part["responded"].sum()),
+        "rate": part["responded"].mean(),
+        "dollars": part["afd_amount"].sum(),
+    }
+)
+by_tier = pd.DataFrame(rows)
+
+fig = px.bar(by_tier, x="prior giving", y="rate")
+fig.update_traces(texttemplate=[pct(r) for r in by_tier["rate"]], textposition="outside")
+fig.update_layout(
+    xaxis_title="Prior lifetime giving", yaxis_title="Share of households that responded",
+    yaxis_tickformat=".0%",
+)
+fig.update_traces(marker_color=SEQUENTIAL_BLUE[7])
+style(fig).show()
+```
+
+```{python}
+by_tier["rate"] = by_tier["rate"].map(pct)
+by_tier["dollars"] = by_tier["dollars"].map(money)
+by_tier["median responder gift"] = [
+    money(ap[ap["prior_size_tier"] == tier]["afd_amount"][lambda s: s > 0].median())
+    if tier in TIER_LABELS
+    else money(part["afd_amount"][lambda s: s > 0].median())
+    for tier in by_tier["prior giving"]
+]
+by_tier
+```
+
+## Response by prior-donor status
+
+```{python}
+rows = []
+for label, mask in [
+    ("gave in FY25 (year before appeal)", ap["prior_fy_donor"]),
+    ("prior donor, not in FY25 (lapsed ≥1y)", ap["prior_donor"] & ~ap["prior_fy_donor"]),
+    ("lapsed 24+ months", ap["lapsed_donor"]),
+    ("never gave", ~ap["prior_donor"]),
+]:
+    part = ap[mask.fillna(False)]
+    rows.append(
+        {
+            "group": label,
+            "households": len(part),
+            "responded": int(part["responded"].sum()),
+            "rate": pct(part["responded"].mean()),
+            "dollars": money(part["afd_amount"].sum()),
+        }
+    )
+pd.DataFrame(rows)
+```
+
+## Response by engagement before the appeal
+
+Engagement counts only activity that happened **before the appeal mailed** —
+events that started on or before September 30, 2025 (registrations for later
+events don't count).
+
+```{python}
+#| label: fig-rate-by-profile
+#| fig-cap: "Response rate by pre-appeal engagement profile"
+order = ["arts+class", "arts", "class", "community/other", "none"]
+rows = []
+for prof in order:
+    part = ap[ap["eng_profile"] == prof]
+    rows.append(
+        {
+            "engagement": prof,
+            "households": len(part),
+            "responded": int(part["responded"].sum()),
+            "rate": part["responded"].mean(),
+        }
+    )
+by_prof = pd.DataFrame(rows)
+
+fig = px.bar(by_prof, x="engagement", y="rate")
+fig.update_traces(
+    texttemplate=[pct(r) for r in by_prof["rate"]], textposition="outside",
+    marker_color=SEQUENTIAL_BLUE[7],
+)
+fig.update_layout(
+    xaxis_title="Pre-appeal engagement (as of Oct 1, 2025)",
+    yaxis_title="Share that responded",
+    yaxis_tickformat=".0%",
+)
+style(fig).show()
+```
+
+```{python}
+by_prof["rate"] = by_prof["rate"].map(pct)
+by_prof
+```
+
+## Response by distance from the Hall
+
+```{python}
+dist = (
+    ap.groupby("distance_band", observed=True)
+    .agg(households=("id", "count"), responded=("responded", "sum"), dollars=("afd_amount", "sum"))
+    .reset_index()
+)
+dist["rate"] = dist["responded"] / dist["households"]
+dist["rate"] = dist["rate"].map(pct)
+dist["dollars"] = dist["dollars"].map(money)
+dist
+```

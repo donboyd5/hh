@@ -1,0 +1,79 @@
+---
+editor_options:
+  chunk_output_type: console
+---
+
+# Who responded to the FY26 fall appeal?
+
+```{python}
+#| label: setup-index
+import pandas as pd
+from hh.io import read_parquet
+from hh.viz import money, pct
+
+rec = read_parquet("processed", "appeal_recipients.parquet")
+t = read_parquet("processed", "appeal_households.parquet")
+
+n_universe = len(t)
+n_appealed = int(t["appealed"].sum())
+ap = t[t["appealed"]]
+n_responded = int(ap["responded"].sum())
+resp_rate = n_responded / n_appealed
+responder_gifts = ap.loc[ap["responded"], "afd_amount"]
+resp_dollars = responder_gifts.sum()
+campaign_total = t["afd_amount"].sum()
+median_gift = responder_gifts.median()
+largest_gift = ap["afd_amount"].max()
+rate_5k = ap.loc[ap["prior_size_tier"] == "$5,000+", "responded"].mean()
+rate_100 = ap.loc[ap["prior_size_tier"] == "<$100", "responded"].mean()
+```
+
+::: {.callout-warning}
+This site is **local only** — its tables name households and giving amounts.
+It is never published; the public book (`notebooks/`) stays aggregate-only.
+:::
+
+The fall 2025 annual appeal was mailed to `{python} f"{len(rec):,}"` recipient
+rows covering `{python} f"{n_appealed:,}"` households — out of
+`{python} f"{n_universe:,}"` households in the Neon database. A household
+**responded** if anyone in it gave a SUCCEEDED gift to the
+*Annual Fund Drive - 2025-2026* campaign between October 1, 2025 and
+January 31, 2026 (see [Methodology](99-methodology.html)).
+
+**Headline numbers**
+
+- Responding households: **`{python} f"{n_responded:,}"`** of
+  `{python} f"{n_appealed:,}"` appealed — `{python} pct(resp_rate)`
+- Appeal-window campaign gifts from appealed households:
+  **`{python} money(resp_dollars)`** of `{python} money(campaign_total)` in the window
+  (`{python} pct(resp_dollars / campaign_total)`)
+- Median responding household: `{python} money(median_gift)`;
+  largest: `{python} money(largest_gift)`
+
+## Response by appeal sheet and segment
+
+The mailing had three parts: a segmented letter to top prospects, a tailored
+letter to theater artists, and a general letter to everyone else.
+
+```{python}
+seg = (
+    ap.groupby("appeal_segment", observed=True)
+    .agg(
+        households=("id", "count"),
+        responded=("responded", "sum"),
+        dollars=("afd_amount", "sum"),
+    )
+    .sort_values("households", ascending=False)
+)
+seg["response rate"] = (seg["responded"] / seg["households"]).map(pct)
+seg["dollars"] = seg["dollars"].map(money)
+seg
+```
+
+Response rates vary enormously by **prior giving** —
+`{python} pct(rate_5k)` of prior `$5,000+` households responded, versus
+`{python} pct(rate_100)` of prior `<$100` households. The next pages break this down
+([response overview](01-response-overview.html),
+[who responded](02-who-responded.html)), then look at the households that were
+**not** appealed ([who was skipped](03-not-appealed.html)) and at how the staff
+spreadsheets reconcile with Neon ([reconciliation](04-reconciliation.html)).
