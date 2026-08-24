@@ -162,6 +162,29 @@ household level.
   over-time trend; where its figure is shown, it is labeled year-to-date and will rise as the
   year fills out.
 
+## FY26 annual appeal
+
+The [appeal chapter](10-appeal-response.html) compares households that were mailed the
+fall 2025 annual appeal with those that were not.
+
+- **Who was appealed** comes from the development office's appeal workbook (three
+  sheets: segmented top prospects, general list, theater artists), which carries Neon
+  account ids; recipients are mapped to households through the current Neon accounts.
+  Subtotal rows, duplicate rows, and placeholder rows are dropped on load; a handful of
+  recipients with no id at all are excluded from household-level rates.
+- **Responded** means at least one SUCCEEDED `DONATION`/`PLEDBGEPAYMENT` gift to the
+  campaign *Annual Fund Drive - 2025-2026* dated 2025-10-01 through 2026-01-31, on any
+  account in the household — the gift often arrives on a spouse's account rather than
+  the one that was mailed.
+- **Prior giving** is lifetime giving before October 1, 2025 (same donor basis and
+  tiers as above; FY25 = July 2024 – June 2025).
+- **Engagement before the appeal** counts registrations for events that *started* by
+  September 30, 2025 (event start date, not registration date), profiled as arts
+  (performances), class, both, community-only, or none.
+- The chapter reports **aggregates only**. Household-level detail, staff notes, and
+  Don's stewardship notes stay in local-only outputs (a separate non-published analysis
+  site and an Excel workbook under `data/`).
+
 ## Geography
 
 Distances are straight-line (haversine) from Hubbard Hall (25 E Main St, Cambridge NY) to each
