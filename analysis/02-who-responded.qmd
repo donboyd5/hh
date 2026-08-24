@@ -15,7 +15,11 @@ responses, and the higher-tier prior donors who did **not** respond.
 ```{python}
 #| label: setup-who
 import pandas as pd
+from hh.clean.accounts import clean_accounts
+from hh.clean.donations import clean_donations
+from hh.external.notes import load_boyd_notes
 from hh.io import read_parquet
+from hh.analytics.appeal import last_gift_year_totals
 from hh.viz import money, pct
 
 t = read_parquet("processed", "appeal_households.parquet")
@@ -28,6 +32,20 @@ n_5k_silent = int(
 )
 top_dollars = ap.nlargest(25, "afd_amount")["afd_amount"].sum()
 top_share = top_dollars / ap["afd_amount"].sum()
+
+# last-gift-year totals and Don's stewardship notes, shared with the workbook export
+donations = clean_donations(accounts=clean_accounts())
+last_yr = last_gift_year_totals(donations)
+notes = load_boyd_notes()
+
+
+def town_with_state(row) -> str:
+    """Town, with the state abbreviation appended when it is not New York."""
+    city = "" if pd.isna(row["city"]) else str(row["city"]).strip()
+    state = "" if pd.isna(row["state_province"]) else str(row["state_province"]).strip()
+    if not city:
+        return state if state and state != "NY" else ""
+    return f"{city}, {state}" if state and state != "NY" else city
 ```
 
 ## Prior giving × engagement
@@ -73,23 +91,31 @@ top
 In total, `{python} f"{n_big_silent:,}"` prior-donor households with
 `{python} money(big_total)` of lifetime giving before the appeal did not respond —
 including `{python} f"{n_5k_silent}"` in the `$5,000+` lifetime tier. The 25 largest
-of those:
+of those (*last-gift-yr $* = what the household gave in the calendar year of its
+most recent pre-appeal gift; *note* = Don's stewardship notes, kept in the local
+`data/30_external/boyd-notes.yaml`):
 
 ```{python}
 big_silent = ap[
     ap["prior_donor"] & ~ap["responded"] & (ap["prior_lifetime_amount"] >= 1000)
 ].nlargest(25, "prior_lifetime_amount")
-big_silent = big_silent[
-    ["name", "appeal_segment", "prior_lifetime_amount", "prior_last_gift", "eng_profile", "city"]
-].rename(
-    columns={
-        "name": "household", "appeal_segment": "segment",
-        "prior_lifetime_amount": "lifetime before appeal", "prior_last_gift": "last gift",
-        "eng_profile": "engagement", "city": "town",
+big_silent = big_silent.merge(last_yr, on="id", how="left")
+
+tbl = pd.DataFrame(
+    {
+        "household": big_silent["name"],
+        "segment": big_silent["appeal_segment"],
+        "lifetime before appeal": big_silent["prior_lifetime_amount"].map(money),
+        "last gift": big_silent["prior_last_gift"].dt.strftime("%Y-%m-%d"),
+        "last-gift-yr $": big_silent["last_gift_year_total"].map(
+            lambda v: money(v) if pd.notna(v) else "—"
+        ),
+        "engagement": big_silent["eng_profile"],
+        "town": big_silent.apply(town_with_state, axis=1),
+        "note": big_silent["id"].astype(str).map(notes),
     }
 ).reset_index(drop=True)
-big_silent["lifetime before appeal"] = big_silent["lifetime before appeal"].map(money)
-big_silent
+tbl
 ```
 
 ## Staff notes on the mailing list

@@ -5,6 +5,7 @@ from hh.analytics.appeal import (
     appeal_household_table,
     campaign_gifts,
     engagement_asof,
+    last_gift_year_totals,
     prior_giving_features,
     reconcile_eoy_export,
     response_summary,
@@ -58,6 +59,28 @@ def test_prior_giving_asof_excludes_appeal_window():
     assert row["prior_donor"]
     assert row["prior_fy_amount"] == 100  # only the FY25 gift (window opened 2025-07-01)
     assert not row["lapsed_donor"]
+
+
+def test_last_gift_year_totals_takes_most_recent_year():
+    d = _donations([
+        ("D1", "A1", "H1", "Individual", "2022-05-01", 500, "SUCCEEDED", "DONATION", "Other"),
+        ("D2", "A1", "H1", "Individual", "2022-11-01", 250, "SUCCEEDED", "DONATION", "Other"),
+        ("D3", "A1", "H1", "Individual", "2024-03-01", 100, "SUCCEEDED", "DONATION", "Other"),
+    ])
+    out = last_gift_year_totals(d, asof=ASOF).set_index("id")
+    assert out.loc["H1", "last_gift_year"] == 2024  # most recent year, not the biggest
+    assert out.loc["H1", "last_gift_year_total"] == 100  # only that year's gifts
+
+
+def test_last_gift_year_totals_excludes_window_gifts():
+    d = _donations([
+        ("D1", "A1", "H1", "Individual", "2025-09-30", 100, "SUCCEEDED", "DONATION", "Other"),
+        ("D2", "A1", "H1", "Individual", "2025-12-01", 500, "SUCCEEDED", "DONATION", CAMPAIGN),
+    ])
+    out = last_gift_year_totals(d, asof=ASOF)
+    # the Dec 2025 gift is after as-of and must not become the "last gift year"
+    assert out.loc[0, "last_gift_year"] == 2025
+    assert out.loc[0, "last_gift_year_total"] == 100
 
 
 def test_prior_giving_tier_and_lapsed():
