@@ -11,6 +11,7 @@ dependencies = [
     "pyyaml>=6.0",         # config / manifest / overrides
     "python-dotenv>=1.0",  # load NEON_ORG_ID / NEON_API_KEY from .env
     "plotly>=6.8.0",
+    "openpyxl>=3.1",       # read staff-maintained xlsx workbooks (data/30_external)
 ]
 
 [dependency-groups]
