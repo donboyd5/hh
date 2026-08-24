@@ -2,7 +2,7 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
 
 <meta charset="utf-8">
-<meta name="generator" content="quarto-1.10.14">
+<meta name="generator" content="quarto-1.11.1">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
@@ -12,10 +12,13 @@
 /* Default styles provided by pandoc.
 ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
 */
-code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
-div.columns{display: flex; gap: min(4vw, 1.5em);}
-div.column{flex: auto; overflow-x: auto;}
+div.columns{display: flex; gap: 1.5em;}
+div.column{flex: auto;}
+@media screen {
+div.columns{gap: min(4vw, 1.5em);}
+div.column{overflow-x: auto;}
+}
 div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
 ul.task-list{list-style: none;}
 ul.task-list li input[type="checkbox"] {
@@ -76,10 +79,10 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <script src="site_libs/quarto-html/tippy.umd.min.js"></script>
 <script src="site_libs/quarto-html/anchor.min.js"></script>
 <link href="site_libs/quarto-html/tippy.css" rel="stylesheet">
-<link href="site_libs/quarto-html/quarto-syntax-highlighting-7832d8100c30e5308af25d4a964213de.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<link href="site_libs/quarto-html/quarto-syntax-highlighting-d5b4e69c7e37b49c6591bcc5116dd748.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="site_libs/bootstrap/bootstrap-8fba2a3cfe4020b07169e9323514a6da.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="site_libs/bootstrap/bootstrap-bed27d3646e12d533e3857add65bae20.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "sidebar",
   "copy-button": false,
@@ -193,6 +196,12 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
  <span class="menu-text"><span class="chapter-number">6</span>&nbsp; <span class="chapter-title">What performances do donors attend?</span></span></a>
   </div>
 </li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="./10-appeal-response.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">7</span>&nbsp; <span class="chapter-title">Who responded to the FY26 annual appeal?</span></span></a>
+  </div>
+</li>
       </ul>
   </li>
         <li class="sidebar-item sidebar-item-section">
@@ -207,13 +216,13 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="./02-timing.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text"><span class="chapter-number">7</span>&nbsp; <span class="chapter-title">When do people come to Hubbard Hall?</span></span></a>
+ <span class="menu-text"><span class="chapter-number">8</span>&nbsp; <span class="chapter-title">When do people come to Hubbard Hall?</span></span></a>
   </div>
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="./03-travel-distance.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text"><span class="chapter-number">8</span>&nbsp; <span class="chapter-title">How far do people travel to Hubbard Hall?</span></span></a>
+ <span class="menu-text"><span class="chapter-number">9</span>&nbsp; <span class="chapter-title">How far do people travel to Hubbard Hall?</span></span></a>
   </div>
 </li>
       </ul>
@@ -230,7 +239,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="./09-classes.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text"><span class="chapter-number">9</span>&nbsp; <span class="chapter-title">Who takes classes at Hubbard Hall?</span></span></a>
+ <span class="menu-text"><span class="chapter-number">10</span>&nbsp; <span class="chapter-title">Who takes classes at Hubbard Hall?</span></span></a>
   </div>
 </li>
       </ul>
@@ -247,7 +256,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="./04-overlap.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text"><span class="chapter-number">10</span>&nbsp; <span class="chapter-title">How do giving and participation overlap?</span></span></a>
+ <span class="menu-text"><span class="chapter-number">11</span>&nbsp; <span class="chapter-title">How do giving and participation overlap?</span></span></a>
   </div>
 </li>
       </ul>
@@ -290,9 +299,10 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   <li><a href="#data-cleaning" id="toc-data-cleaning" class="nav-link" data-scroll-target="#data-cleaning"><span class="header-section-number">A.3</span> Data cleaning</a></li>
   <li><a href="#definitions" id="toc-definitions" class="nav-link" data-scroll-target="#definitions"><span class="header-section-number">A.4</span> Definitions</a></li>
   <li><a href="#donor-size-and-persistence" id="toc-donor-size-and-persistence" class="nav-link" data-scroll-target="#donor-size-and-persistence"><span class="header-section-number">A.5</span> Donor size and persistence</a></li>
-  <li><a href="#geography" id="toc-geography" class="nav-link" data-scroll-target="#geography"><span class="header-section-number">A.6</span> Geography</a></li>
-  <li><a href="#attendance-headcount" id="toc-attendance-headcount" class="nav-link" data-scroll-target="#attendance-headcount"><span class="header-section-number">A.7</span> Attendance headcount</a></li>
-  <li><a href="#reconstructing-multi-day-production-runs" id="toc-reconstructing-multi-day-production-runs" class="nav-link" data-scroll-target="#reconstructing-multi-day-production-runs"><span class="header-section-number">A.8</span> Reconstructing multi-day production runs</a></li>
+  <li><a href="#fy26-annual-appeal" id="toc-fy26-annual-appeal" class="nav-link" data-scroll-target="#fy26-annual-appeal"><span class="header-section-number">A.6</span> FY26 annual appeal</a></li>
+  <li><a href="#geography" id="toc-geography" class="nav-link" data-scroll-target="#geography"><span class="header-section-number">A.7</span> Geography</a></li>
+  <li><a href="#attendance-headcount" id="toc-attendance-headcount" class="nav-link" data-scroll-target="#attendance-headcount"><span class="header-section-number">A.8</span> Attendance headcount</a></li>
+  <li><a href="#reconstructing-multi-day-production-runs" id="toc-reconstructing-multi-day-production-runs" class="nav-link" data-scroll-target="#reconstructing-multi-day-production-runs"><span class="header-section-number">A.9</span> Reconstructing multi-day production runs</a></li>
   </ul>
 </nav>
     </div>
@@ -444,16 +454,27 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <li><strong>Partial years.</strong> The current calendar year is year-to-date and is left out of every over-time trend; where its figure is shown, it is labeled year-to-date and will rise as the year fills out.</li>
 </ul>
 </section>
-<section id="geography" class="level2" data-number="A.6">
-<h2 data-number="A.6" class="anchored" data-anchor-id="geography"><span class="header-section-number">A.6</span> Geography</h2>
+<section id="fy26-annual-appeal" class="level2" data-number="A.6">
+<h2 data-number="A.6" class="anchored" data-anchor-id="fy26-annual-appeal"><span class="header-section-number">A.6</span> FY26 annual appeal</h2>
+<p>The <a href="10-appeal-response.html">appeal chapter</a> compares households that were mailed the fall 2025 annual appeal with those that were not.</p>
+<ul>
+<li><strong>Who was appealed</strong> comes from the development office’s appeal workbook (three sheets: segmented top prospects, general list, theater artists), which carries Neon account ids; recipients are mapped to households through the current Neon accounts. Subtotal rows, duplicate rows, and placeholder rows are dropped on load; a handful of recipients with no id at all are excluded from household-level rates.</li>
+<li><strong>Responded</strong> means at least one SUCCEEDED <code>DONATION</code>/<code>PLEDBGEPAYMENT</code> gift to the campaign <em>Annual Fund Drive - 2025-2026</em> dated 2025-10-01 through 2026-01-31, on any account in the household — the gift often arrives on a spouse’s account rather than the one that was mailed.</li>
+<li><strong>Prior giving</strong> is lifetime giving before October 1, 2025 (same donor basis and tiers as above; FY25 = July 2024 – June 2025).</li>
+<li><strong>Engagement before the appeal</strong> counts registrations for events that <em>started</em> by September 30, 2025 (event start date, not registration date), profiled as arts (performances), class, both, community-only, or none.</li>
+<li>The chapter reports <strong>aggregates only</strong>. Household-level detail, staff notes, and Don’s stewardship notes stay in local-only outputs (a separate non-published analysis site and an Excel workbook under <code>data/</code>).</li>
+</ul>
+</section>
+<section id="geography" class="level2" data-number="A.7">
+<h2 data-number="A.7" class="anchored" data-anchor-id="geography"><span class="header-section-number">A.7</span> Geography</h2>
 <p>Distances are straight-line (haversine) from Hubbard Hall (25 E Main St, Cambridge NY) to each household, bucketed into half-open mile bands. Households whose only address is a PO box are placed at their ZIP’s centroid and flagged “approximate”; they are excluded from the tight 1-mile count so it stays honest.</p>
 </section>
-<section id="attendance-headcount" class="level2" data-number="A.7">
-<h2 data-number="A.7" class="anchored" data-anchor-id="attendance-headcount"><span class="header-section-number">A.7</span> Attendance headcount</h2>
+<section id="attendance-headcount" class="level2" data-number="A.8">
+<h2 data-number="A.8" class="anchored" data-anchor-id="attendance-headcount"><span class="header-section-number">A.8</span> Attendance headcount</h2>
 <p>Registration counts understate attendance: one registration is a purchase, and averages about two attendees. Where the text says <strong>headcount</strong>, it counts ticket attendees whose registration status is SUCCEEDED — this also automatically drops canceled and refunded attendees.</p>
 </section>
-<section id="reconstructing-multi-day-production-runs" class="level2" data-number="A.8">
-<h2 data-number="A.8" class="anchored" data-anchor-id="reconstructing-multi-day-production-runs"><span class="header-section-number">A.8</span> Reconstructing multi-day production runs</h2>
+<section id="reconstructing-multi-day-production-runs" class="level2" data-number="A.9">
+<h2 data-number="A.9" class="anchored" data-anchor-id="reconstructing-multi-day-production-runs"><span class="header-section-number">A.9</span> Reconstructing multi-day production runs</h2>
 <p>Each performance night is a separate Neon event (e.g.&nbsp;“Fun Home - Friday, February 3 at 7:30 pm”) — there is no field linking the nights of a run. Runs are therefore reconstructed by a manually curated mapping from event names to productions (<code>hh.analytics.productions</code>):</p>
 <ul>
 <li><strong>Mapping.</strong> Every theater event name matches exactly one production title pattern (coverage is exhaustive and tested). For music and opera, only titles with multiple performances are mapped; one-off concerts cannot form a run and are dropped.</li>
@@ -870,7 +891,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <nav class="page-navigation">
   <div class="nav-page nav-page-previous">
       <a href="./04-overlap.html" class="pagination-link" aria-label="How do giving and participation overlap?">
-        <i class="bi bi-arrow-left-short"></i> <span class="nav-page-text"><span class="chapter-number">10</span>&nbsp; <span class="chapter-title">How do giving and participation overlap?</span></span>
+        <i class="bi bi-arrow-left-short"></i> <span class="nav-page-text"><span class="chapter-number">11</span>&nbsp; <span class="chapter-title">How do giving and participation overlap?</span></span>
       </a>          
   </div>
   <div class="nav-page nav-page-next">
