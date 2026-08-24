@@ -6,6 +6,7 @@ order, sequential = one hue light->dark, no dual axes, identity never color-alon
 """
 from __future__ import annotations
 
+import pandas as pd
 import plotly.graph_objects as go
 
 # Validated categorical palette (fixed order; worst adjacent CVD dE 24.2).
@@ -57,6 +58,11 @@ def pct(x) -> str:
         return f"{x:.1%}"
     except (TypeError, ValueError):
         return x
+
+
+def fmt_gift(s: pd.Series) -> pd.Series:
+    """Series of gift stats for display — missing values (no responders) show an em dash."""
+    return s.map(lambda v: money(v) if pd.notna(v) else "—")
 
 
 def style(fig: go.Figure) -> go.Figure:

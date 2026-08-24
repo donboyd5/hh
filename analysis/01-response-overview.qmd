@@ -10,18 +10,43 @@ editor_options:
 import pandas as pd
 import plotly.express as px
 from hh.io import read_parquet
+from hh.analytics.appeal import response_summary
 from hh.analytics.donors import TIER_LABELS
-from hh.viz import style, money, pct, SEQUENTIAL_BLUE, CATEGORICAL
+from hh.viz import style, money, pct, fmt_gift, SEQUENTIAL_BLUE
 
 t = read_parquet("processed", "appeal_households.parquet")
 ap = t[t["appealed"]].copy()
 n_appealed = len(ap)
+
+BAND_LABELS = {  # distance_band -> display label (miles from the Hall)
+    "[0, 1)": "0–1 mi", "[1, 5)": "1–5 mi", "[5, 10)": "5–10 mi",
+    "[10, 20)": "10–20 mi", "[20, ∞)": "20+ mi",
+}
+
+
+def display_summary(df: pd.DataFrame, by: str, order: list | None = None) -> pd.DataFrame:
+    """response_summary with compact, consistently labeled columns for the tables."""
+    out = response_summary(df, by).set_index(by)
+    if order is not None:
+        out = out.reindex(order)
+    out = out.reset_index().rename(
+        columns={
+            "households": "HH", "responded": "gave", "dollars": "total $",
+            "avg_gift": "avg gift", "median_gift": "median gift",
+        }
+    )
+    out["rate"] = out["rate"].map(pct)
+    out["total $"] = out["total $"].map(money)
+    out["avg gift"] = fmt_gift(out["avg gift"])
+    out["median gift"] = fmt_gift(out["median gift"])
+    return out
 ```
 
 Response rates and dollars for the `{python} f"{n_appealed:,}"` appealed households,
 cut by prior giving, engagement, and geography. Every cut counts the same thing:
 a household is a **responder** if it gave to the FY26 annual-fund campaign in the
-Oct 2025 – Jan 2026 window.
+Oct 2025 – Jan 2026 window. *Avg gift* and *median gift* describe responding
+households only; a dash means no households in the group responded.
 
 ## Response by prior-giving tier
 
@@ -31,74 +56,39 @@ rolled up to the household, in the same four tiers the public book uses.
 ```{python}
 #| label: fig-rate-by-tier
 #| fig-cap: "Response rate by prior-lifetime-giving tier (never-donors shown separately)"
-tiers = TIER_LABELS + ["never gave"]
-rows = []
-for tier in TIER_LABELS:
-    part = ap[ap["prior_size_tier"] == tier]
-    rows.append(
-        {
-            "prior giving": tier,
-            "households": len(part),
-            "responded": int(part["responded"].sum()),
-            "rate": part["responded"].mean(),
-            "dollars": part["afd_amount"].sum(),
-        }
-    )
-part = ap[~ap["prior_donor"]]
-rows.append(
-    {
-        "prior giving": "never gave",
-        "households": len(part),
-        "responded": int(part["responded"].sum()),
-        "rate": part["responded"].mean(),
-        "dollars": part["afd_amount"].sum(),
-    }
-)
-by_tier = pd.DataFrame(rows)
+ap["prior tier"] = ap["prior_size_tier"].fillna("never gave")
+tier_order = TIER_LABELS + ["never gave"]
+by_tier = response_summary(ap, "prior tier").set_index("prior tier").reindex(tier_order)
 
-fig = px.bar(by_tier, x="prior giving", y="rate")
-fig.update_traces(texttemplate=[pct(r) for r in by_tier["rate"]], textposition="outside")
+fig = px.bar(by_tier.reset_index(), x="prior tier", y="rate")
+fig.update_traces(
+    texttemplate=[pct(r) for r in by_tier["rate"]], textposition="outside",
+    marker_color=SEQUENTIAL_BLUE[7],
+)
 fig.update_layout(
     xaxis_title="Prior lifetime giving", yaxis_title="Share of households that responded",
     yaxis_tickformat=".0%",
 )
-fig.update_traces(marker_color=SEQUENTIAL_BLUE[7])
 style(fig).show()
 ```
 
 ```{python}
-by_tier["rate"] = by_tier["rate"].map(pct)
-by_tier["dollars"] = by_tier["dollars"].map(money)
-by_tier["median responder gift"] = [
-    money(ap[ap["prior_size_tier"] == tier]["afd_amount"][lambda s: s > 0].median())
-    if tier in TIER_LABELS
-    else money(part["afd_amount"][lambda s: s > 0].median())
-    for tier in by_tier["prior giving"]
-]
-by_tier
+display_summary(ap, "prior tier", order=tier_order)
 ```
 
 ## Response by prior-donor status
 
 ```{python}
-rows = []
-for label, mask in [
-    ("gave in FY25 (year before appeal)", ap["prior_fy_donor"]),
-    ("prior donor, not in FY25 (lapsed ≥1y)", ap["prior_donor"] & ~ap["prior_fy_donor"]),
-    ("lapsed 24+ months", ap["lapsed_donor"]),
-    ("never gave", ~ap["prior_donor"]),
-]:
-    part = ap[mask.fillna(False)]
-    rows.append(
-        {
-            "group": label,
-            "households": len(part),
-            "responded": int(part["responded"].sum()),
-            "rate": pct(part["responded"].mean()),
-            "dollars": money(part["afd_amount"].sum()),
-        }
-    )
-pd.DataFrame(rows)
+groups = [
+    ("gave in FY25 (year before appeal)", ap["prior_fy_donor"].fillna(False)),
+    ("prior donor, not in FY25", ap["prior_donor"] & ~ap["prior_fy_donor"].fillna(False)),
+    ("lapsed 24+ months", ap["lapsed_donor"].fillna(False)),
+    ("never gave", ~ap["prior_donor"].fillna(False)),
+]
+status = pd.concat(
+    [ap[mask].assign(**{"donor status": label}) for label, mask in groups]
+)
+display_summary(status, "donor status", order=[g[0] for g in groups])
 ```
 
 ## Response by engagement before the appeal
@@ -110,21 +100,12 @@ events don't count).
 ```{python}
 #| label: fig-rate-by-profile
 #| fig-cap: "Response rate by pre-appeal engagement profile"
-order = ["arts+class", "arts", "class", "community/other", "none"]
-rows = []
-for prof in order:
-    part = ap[ap["eng_profile"] == prof]
-    rows.append(
-        {
-            "engagement": prof,
-            "households": len(part),
-            "responded": int(part["responded"].sum()),
-            "rate": part["responded"].mean(),
-        }
-    )
-by_prof = pd.DataFrame(rows)
+profile_order = ["arts+class", "arts", "class", "community/other", "none"]
+by_prof = (
+    response_summary(ap, "eng_profile").set_index("eng_profile").reindex(profile_order)
+)
 
-fig = px.bar(by_prof, x="engagement", y="rate")
+fig = px.bar(by_prof.reset_index(), x="eng_profile", y="rate")
 fig.update_traces(
     texttemplate=[pct(r) for r in by_prof["rate"]], textposition="outside",
     marker_color=SEQUENTIAL_BLUE[7],
@@ -138,20 +119,13 @@ style(fig).show()
 ```
 
 ```{python}
-by_prof["rate"] = by_prof["rate"].map(pct)
-by_prof
+display_summary(ap, "eng_profile", order=profile_order)
 ```
 
 ## Response by distance from the Hall
 
 ```{python}
-dist = (
-    ap.groupby("distance_band", observed=True)
-    .agg(households=("id", "count"), responded=("responded", "sum"), dollars=("afd_amount", "sum"))
-    .reset_index()
-)
-dist["rate"] = dist["responded"] / dist["households"]
-dist["rate"] = dist["rate"].map(pct)
-dist["dollars"] = dist["dollars"].map(money)
-dist
+ap["miles"] = ap["distance_band"].map(BAND_LABELS)
+band_order = list(BAND_LABELS.values())
+display_summary(ap, "miles", order=band_order)
 ```

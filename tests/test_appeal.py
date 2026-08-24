@@ -7,6 +7,7 @@ from hh.analytics.appeal import (
     engagement_asof,
     prior_giving_features,
     reconcile_eoy_export,
+    response_summary,
 )
 
 ASOF = pd.Timestamp("2025-10-01")
@@ -75,24 +76,63 @@ def test_prior_giving_tier_and_lapsed():
     assert bool(out.loc["H2", "prior_fy_donor"])
 
 
+def test_response_summary_groups_and_gift_stats():
+    ap = pd.DataFrame(
+        {
+            "id": ["H1", "H2", "H3", "H4"],
+            "segment": ["a", "a", "b", "b"],
+            "responded": [True, False, True, False],
+            "afd_amount": [100.0, 0.0, 50.0, 0.0],
+        }
+    )
+    out = response_summary(ap, "segment").set_index("segment")
+    assert out.loc["a", "households"] == 2 and out.loc["a", "responded"] == 1
+    assert out.loc["a", "rate"] == 0.5
+    assert out.loc["a", "dollars"] == 100.0
+    assert out.loc["a", "avg_gift"] == 100.0  # responder only — the non-responder is excluded
+    assert out.loc["a", "median_gift"] == 100.0
+
+
+def test_response_summary_no_responders_shows_missing_gift_stats():
+    ap = pd.DataFrame(
+        {
+            "id": ["H1", "H2"],
+            "segment": ["a", "a"],
+            "responded": [False, False],
+            "afd_amount": [0.0, 0.0],
+        }
+    )
+    out = response_summary(ap, "segment")
+    assert out.loc[0, "rate"] == 0.0
+    assert pd.isna(out.loc[0, "avg_gift"]) and pd.isna(out.loc[0, "median_gift"])
+
+
 def test_engagement_asof_uses_event_start_not_registration_date():
     regs = pd.DataFrame(
         {
-            "registration_id": ["R1", "R2", "R3"],
-            "id": ["H1", "H2", "H3"],
-            "event_majorcat": ["performance", "class", "performance"],
-            "event_minorcat": ["theater", pd.NA, "music"],
+            "registration_id": ["R1", "R2", "R3", "R4", "R4b", "R5"],
+            "id": ["H1", "H2", "H3", "H4", "H4", "H5"],
+            "event_majorcat": [
+                "performance", "class", "performance", "class", "performance", "community",
+            ],
+            "event_minorcat": ["theater", pd.NA, "music", pd.NA, "opera", pd.NA],
             # R1: registered Sept for a November show -> NOT engaged as of Oct 1
-            # R2: class that started before the appeal -> engaged
-            # R3: show that started before the appeal -> engaged
-            "starts_on": pd.to_datetime(["2025-11-01", "2025-06-01", "2025-09-30"]),
-            "registered_at": pd.to_datetime(["2025-09-15", "2025-05-01", "2025-08-01"]),
+            # R2/R3: class and show that started before the appeal -> engaged
+            # H4 does both arts and class; H5 only community events
+            "starts_on": pd.to_datetime(
+                ["2025-11-01", "2025-06-01", "2025-09-30", "2025-08-01", "2025-08-02", "2025-07-01"]
+            ),
+            "registered_at": pd.to_datetime(
+                ["2025-09-15", "2025-05-01", "2025-08-01", "2025-07-01", "2025-07-02", "2025-06-01"]
+            ),
         }
     )
     out = engagement_asof(regs, asof=ASOF).set_index("id")
     assert "H1" not in out.index  # attendance had not happened yet
     assert out.loc["H2", "eng_profile"] == "class"
     assert out.loc["H3", "eng_profile"] == "arts"
+    assert out.loc["H4", "eng_profile"] == "arts+class"  # both, not clobbered to one
+    assert out.loc["H5", "eng_profile"] == "community/other"
     assert out.loc["H3", "eng_perf_music"] == 1
 
 

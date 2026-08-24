@@ -14,6 +14,7 @@ member's account.
 """
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 
 from .donors import size_tier, succeeded_individual_gifts
@@ -86,6 +87,29 @@ def prior_giving_features(
     return out
 
 
+def response_summary(df: pd.DataFrame, by: str) -> pd.DataFrame:
+    """Households, responders, response rate, and responder gift stats grouped by one column.
+
+    ``avg_gift`` / ``median_gift`` describe only households that responded (non-responders
+    are NaN so a group with no responders shows missing, not zero). The input is an
+    appealed-households frame (any subset of ``appeal_household_table``).
+    """
+    amounts = df["afd_amount"].where(df["responded"])
+    g = (
+        df.assign(_resp_amount=amounts)
+        .groupby(by, observed=True)
+        .agg(
+            households=("id", "count"),
+            responded=("responded", "sum"),
+            dollars=("afd_amount", "sum"),
+            avg_gift=("_resp_amount", "mean"),
+            median_gift=("_resp_amount", "median"),
+        )
+    )
+    g["rate"] = g["responded"] / g["households"]
+    return g.reset_index()
+
+
 def engagement_asof(
     registrations: pd.DataFrame, *, asof: pd.Timestamp = APPEAL_START
 ) -> pd.DataFrame:
@@ -115,9 +139,16 @@ def engagement_asof(
 
     arts = out.get("eng_n_performance", pd.Series(0, index=out.index)) > 0
     classes = out.get("eng_n_class", pd.Series(0, index=out.index)) > 0
+    # first matching condition wins: both -> arts+class, then arts, then class
     out["eng_profile"] = pd.Series(
-        pd.NA, index=out.index, dtype="string"
-    ).mask(arts & classes, "arts+class").mask(arts, "arts").mask(classes, "class")
+        np.select(
+            [arts & classes, arts, classes],
+            ["arts+class", "arts", "class"],
+            default=None,
+        ),
+        index=out.index,
+        dtype="string",
+    )
     # households whose only pre-appeal activity was community/other events
     out["eng_profile"] = out["eng_profile"].fillna("community/other")
     return out
