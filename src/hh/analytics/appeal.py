@@ -50,6 +50,24 @@ def campaign_gifts(
     ].copy()
 
 
+def last_gift_year_totals(
+    donations: pd.DataFrame, *, asof: pd.Timestamp = APPEAL_START
+) -> pd.DataFrame:
+    """Per household: the calendar year of the most recent pre-``asof`` gift and the
+    total given that year — the giving level the household was at when last active."""
+    gifts = succeeded_individual_gifts(donations)
+    gifts = gifts[gifts["donation_date"] < asof]
+    per_year = (
+        gifts.assign(year=gifts["donation_date"].dt.year)
+        .groupby(["id", "year"], as_index=False)["donation_amount"]
+        .sum()
+    )
+    out = per_year.sort_values("year").groupby("id").tail(1)
+    return out.rename(
+        columns={"year": "last_gift_year", "donation_amount": "last_gift_year_total"}
+    )
+
+
 def prior_giving_features(
     donations: pd.DataFrame,
     *,

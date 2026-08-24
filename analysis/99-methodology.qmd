@@ -23,6 +23,16 @@ Each external file's checksum, size, and mtime are recorded in
 `data/manifest/external-*.yaml`; the build logs row-level QA counts to
 `data/manifest/run_log.jsonl`.
 
+Two further local-only files (both under gitignored `data/`, never committed):
+
+- **`data/30_external/boyd-notes.yaml`** — Don's stewardship notes, keyed by
+  household rollup id. Shown verbatim in the silent-donor table and the donor
+  workbook; edit the file and re-render to update.
+- **`data/20_processed/hh-donor-workbook.xlsx`** — an Excel export for
+  stewardship work, written by `scripts/export_donor_workbook.py` (run after
+  `scripts/build.py`): every prior-donor household, the full $1,000+ silent
+  list, and an about sheet with definitions.
+
 ## Definitions
 
 - **Household** — the same rollup as the public book: the Neon household id

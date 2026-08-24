@@ -207,6 +207,27 @@ def test_clean_eoy_gifts_handles_datetime_dates():
     assert out["donation_date"].iloc[0] == pd.Timestamp("2025-12-01")
 
 
+def test_load_boyd_notes_reads_ids_and_skips_incomplete(tmp_path):
+    from hh.external.notes import load_boyd_notes
+
+    f = tmp_path / "boyd-notes.yaml"
+    f.write_text(
+        "notes:\n"
+        '  "64": {name: Evelyn Estey, note: did not respond to texts}\n'
+        '  "87": {name: Charles & Marcia Reiss, note: ""}\n'  # empty note -> skipped
+        "  205:\n"  # missing note entirely -> skipped
+        "    name: Thom Jones\n"
+    )
+    notes = load_boyd_notes(f)
+    assert notes == {"64": "did not respond to texts"}
+
+
+def test_load_boyd_notes_missing_file_is_empty(tmp_path):
+    from hh.external.notes import load_boyd_notes
+
+    assert load_boyd_notes(tmp_path / "absent.yaml") == {}
+
+
 def test_external_source_entry_records_sha256(tmp_path, monkeypatch):
     import yaml
 
