@@ -37,7 +37,35 @@ FY_MONTH = 7  # fiscal year starts July 1
 GIVING_FYS = (2022, 2023, 2024, 2025, 2026)
 ENGAGEMENT_FYS = (2024, 2025, 2026)
 DE_MINIMIS_5YR = 10.0
-MIN_DONOR_5YR = 100.0  # donor-rule rows under this are dropped (Don, 2026-08-27)
+# rows under this 5-year total are dropped unless keep-identified (Don, 2026-08-27)
+MIN_DONOR_5YR = 200.0
+
+# last year's annual-campaign period: a household that RECEIVED the appeal (appealed=TRUE
+# in the appeal workbook) and gave at least this much in the window is kept regardless of
+# the floor (Don, 2026-08-28). Any successful gift counts, not just those Judy coded to
+# the Annual Fund Drive campaign — a gift during the appeal is a response whichever
+# bucket it landed in (Misc Donation, Sustaining Donor, ...); the appealed restriction
+# is what excludes sustainer autopayments from people who were never mailed.
+APPEAL_WINDOW = (pd.Timestamp("2025-10-01"), pd.Timestamp("2026-01-31"))
+MIN_APPEAL_GIFT = 10.0
+
+# engaged non-donors: households with no successful gift in the 5-year window but at
+# least this much FY24-26 registration spending (arts + classes + community) enter the
+# list and are exempt from the giving floor (Don, 2026-08-28). In practice this is the
+# parents-of-class-kids pool — families spending $500-$4,000 on classes with zero gifts.
+MIN_ENGAGED_NONDONOR_SPEND = 500.0
+
+# Fort Salem sponsors NOT in Neon are kept only if serious (rule B, Don 2026-08-28):
+# a $100+ tier (Inner Circle or higher) in any year 2021-2025, or sponsorship in two or
+# more years at any level. 2020-only "Opening Angels" (a one-time reopening gesture,
+# amount unpublished) are dropped unless they reappeared later. Dropped names are
+# reported, not deleted, so one can be pulled back by hand.
+FST_TIER_RANK = {
+    "founding": 7, "opening angels": 6, "platinum": 6, "gold": 5, "silver": 4,
+    "bronze": 3, "inner circle": 2, "friends of fort salem": 1,
+}
+FST_KEEP_MIN_RANK = 2  # inner circle ($100-499) and up
+FST_KEEP_MIN_YEARS = 2
 
 # a note that says someone died — unless it also says someone survives (e.g. Don's
 # "Tim has died; wife/gf still around; Sue will contact" keeps the household: mail
@@ -63,19 +91,21 @@ OUTPUT_COLUMNS = [
     # the three codes, then the household name
     "neon_hh_id", "neon_account_ids", "new_code", "household_name",
     # donation history
-    *DON_FY_COLUMNS, "don_5yr_total", "don_lifetime",
+    *DON_FY_COLUMNS, "don_5yr_total", "don_lifetime", "don_appeal_window",
     # contact info
     "contact_first_name", "contact_last_name", "salutation", "address", "city",
     "state_province", "zip_code", "phone", "email",
     # everything else: identity/source flags, indicators, engagement, stewardship,
     # notes, Fort Salem detail
     "in_neon", "src_donor_5yr", "src_donor3", "src_new_accounts",
-    "src_appeal_responded", "src_silent_selected", "fst", "needs_review",
+    "src_appeal_responded", "src_appeal_gift", "appealed_last_year", "src_silent_selected",
+    "src_engaged_nondonor", "fst", "needs_review",
     "never_donated", "gave_fy26", "gave_fy25", "no_gift_last_5yrs",
     "arts_spend_3fy", "classes_spend_3fy", "community_spend_3fy", "regs_3fy",
     "predominant_engagement", "do_not_contact", "deceased", "distance_miles",
     "steward", "steward_detail", "note_donor3", "note_new", "note_silent",
     "note_boyd", "note_neon", "fst_years", "fst_years_list", "fst_best_tier",
+    "fst_candidate_id", "fst_candidate_name",
 ]
 
 
@@ -98,19 +128,35 @@ def gifts_by_fy(donations: pd.DataFrame, fys: tuple[int, ...]) -> pd.DataFrame:
     return table.reset_index()
 
 
+def appeal_window_gifts(
+    donations: pd.DataFrame,
+    *,
+    window: tuple[pd.Timestamp, pd.Timestamp] = APPEAL_WINDOW,
+) -> pd.DataFrame:
+    """Household succeeded-gift totals inside the annual-campaign window -> [id, don_appeal_window]."""
+    g = succeeded_individual_gifts(donations)
+    g = g[g["donation_date"].between(window[0], window[1])]
+    return (
+        g.groupby("id")["donation_amount"].sum().rename("don_appeal_window").reset_index()
+    )
+
+
 def engagement_spend(registrations: pd.DataFrame, fys: tuple[int, ...]) -> pd.DataFrame:
     """Household registration dollars by engagement group (arts/classes/community) + counts."""
     r = registrations.copy()
     r["fy"] = fiscal_year(r["starts_on"])
     r = r[r["fy"].isin(fys) & r["event_majorcat"].isin(CATEGORY_GROUPS)]
     r["group"] = r["event_majorcat"].map(CATEGORY_GROUPS)
+    # key on the rollup ``id`` (household id, else account id): ``household_id`` is
+    # blank for single-account households — 6,259 of 28k registrations — and keying on
+    # it silently zeroed their engagement (found 2026-08-28)
     spend = r.pivot_table(
-        index="household_id", columns="group", values="amount", aggfunc="sum", fill_value=0.0
+        index="id", columns="group", values="amount", aggfunc="sum", fill_value=0.0
     )
     spend = spend.reindex(columns=["arts", "classes", "community"], fill_value=0.0)
     spend.columns = [f"{c}_spend_3fy" for c in spend.columns]
-    counts = r.groupby("household_id").size().rename("regs_3fy")
-    return spend.join(counts).reset_index().rename(columns={"household_id": "id"})
+    counts = r.groupby("id").size().rename("regs_3fy")
+    return spend.join(counts).reset_index()
 
 
 def predominant_engagement(row: pd.Series) -> str:
@@ -176,8 +222,8 @@ def pick_contact(accounts: pd.DataFrame, donations: pd.DataFrame) -> pd.DataFram
     contact["address"] = joined.mask(both_blank, pd.NA)
 
     # salutation: the household-level field wins, the account-level one fills gaps
-    hh_sal = contact.pop("salutation_hh").astype("string") if "salutation_hh" in contact else pd.NA
-    ind_sal = contact.pop("salutation_ind").astype("string") if "salutation_ind" in contact else pd.NA
+    hh_sal = contact.pop("salutation_hh").astype("string")
+    ind_sal = contact.pop("salutation_ind").astype("string")
     contact["salutation"] = hh_sal.fillna(ind_sal)
     return contact
 
@@ -221,10 +267,12 @@ def apply_exclusions(
     - **Deceased**: the Neon deceased flag, or any hand/Neon note saying someone died —
       unless the note also names a survivor ("Tim has died; wife/gf still around"),
       since the mail then goes to the surviving partner.
-    - **Small donor-rule rows**: rows included *only* by the ≥$10 5-year giving rule and
-      giving under ``min_donor_5yr`` ($100). Households from a curated source (Judy's
-      donor or new-accounts lists, the bolded silent keep-list, appeal responders) and
-      the non-Neon Fort Salem review rows survive regardless of amount.
+    - **Small givers**: rows with under ``min_donor_5yr`` ($200) in 5 years drop unless
+      keep-identified — a new person (Judy's new-accounts list, or Fort Salem), one of
+      Don's hand notes or a steward assignment, the bolded silent keep-list, an appeal
+      responder, a household that gave >= $10 in last year's campaign window, or an
+      engaged non-donor (>= $500 FY24-26 spending, no 5-year gift) (Don, 2026-08-27/28). Neon staff notes do not identify a keeper, consistent
+      with the deceased scan.
 
     QA names every dropped household and why, so nothing disappears silently.
     """
@@ -235,14 +283,17 @@ def apply_exclusions(
     by_note = died & ~survivor
     deceased = neon_deceased | by_note
 
-    curated = table[
-        ["src_donor3", "src_new_accounts", "src_appeal_responded", "src_silent_selected"]
-    ].any(axis=1)
-    small = (
-        table["src_donor_5yr"].fillna(False)
-        & ~curated
-        & (table["don_5yr_total"].fillna(0) < min_donor_5yr)
+    keep_identified = (
+        table["src_new_accounts"].fillna(False)
+        | table["fst"].fillna(False)
+        | table["src_silent_selected"].fillna(False)
+        | table["src_appeal_responded"].fillna(False)
+        | table["src_appeal_gift"].fillna(False)
+        | table["src_engaged_nondonor"].fillna(False)
+        | (notes.str.len() > 0)
+        | table["steward"].notna()
     )
+    small = (table["don_5yr_total"].fillna(0) < min_donor_5yr) & ~keep_identified
 
     qa = {
         "dropped_deceased_neon": table.loc[
@@ -255,6 +306,30 @@ def apply_exclusions(
         "dropped_small_donor": table.loc[small, "household_name"].tolist(),
     }
     return table[~deceased & ~small].reset_index(drop=True), qa
+
+
+def fst_candidates(fst_summary: pd.DataFrame, accounts: pd.DataFrame) -> pd.DataFrame:
+    """The single strong Neon candidate per non-exact Fort Salem name, for the main sheet.
+
+    Thin wrapper over :mod:`hh.analytics.fst_match`: a name gets ``fst_candidate_*`` only
+    when exactly one household scores at/above ``AUTO_FILL_SCORE``; the full ranked
+    candidate list (including weaker ones) goes to the workbook's review sheet. Never a
+    merge — Don confirms each.
+    """
+    from .fst_match import auto_candidates, fuzzy_fst_candidates
+
+    return auto_candidates(fuzzy_fst_candidates(fst_summary, accounts))
+
+
+def fst_keep_mask(fst_summary: pd.DataFrame) -> pd.Series:
+    """Rule B: which Fort Salem sponsors are serious enough to keep (see constants)."""
+    tier = fst_summary["best_tier"].astype(str).str.strip().str.lower()
+    rank = tier.map(FST_TIER_RANK).fillna(0)
+    years = fst_summary["years"].astype(str).str.split(",")
+    last_year = years.map(lambda l: max((int(y) for y in l if y.strip().isdigit()), default=0))
+    n_years = pd.to_numeric(fst_summary["n_years"], errors="coerce").fillna(0)
+    angels_2020_only = tier.eq("opening angels") & last_year.eq(2020)
+    return ((rank >= FST_KEEP_MIN_RANK) & ~angels_2020_only) | (n_years >= FST_KEEP_MIN_YEARS)
 
 
 def _new_codes(names: pd.Series) -> pd.Series:
@@ -277,13 +352,16 @@ def build_mailing_list(
     appeal_responded: pd.DataFrame,
     fst_summary: pd.DataFrame,
     boyd_notes: dict[str, str] | None = None,
+    appealed_ids: set[str] | None = None,
 ) -> pd.DataFrame:
     """Assemble the mailing list.
 
     External frames are keyed by matched rollup ``id`` (from
     :func:`hh.external.mailing.match_households`); ``fst_summary`` additionally carries
     ``in_neon`` (bool). ``boyd_notes`` is Don's ``{rollup id: note}`` file
-    (:func:`hh.external.notes.load_boyd_notes`). Returns one row per household in
+    (:func:`hh.external.notes.load_boyd_notes`). ``appealed_ids`` are the rollup ids that
+    received last year's appeal (``appeal_households.appealed``); the campaign-window keep
+    rule applies only to them (None = no restriction, for tests). Returns one row per household in
     :data:`OUTPUT_COLUMNS` order; the exclusion QA (who was dropped and why) rides
     along on ``table.attrs["exclusion_qa"]``.
     """
@@ -295,6 +373,7 @@ def build_mailing_list(
         .groupby("id")["donation_amount"].sum().rename("don_lifetime").reset_index()
     )
     engage = engagement_spend(registrations, ENGAGEMENT_FYS)
+    appeal_win = appeal_window_gifts(donations)
     contact = pick_contact(accounts, donations)
     neon_ids = neon_ids_by_household(accounts)
 
@@ -304,7 +383,17 @@ def build_mailing_list(
     na_ids = set(new_accounts["id"].dropna())
     silent_ids = set(silent_selected["id"].dropna())
     resp_ids = set(appeal_responded["id"].dropna())
-    ids = donor5_ids | d3_ids | na_ids | silent_ids | resp_ids
+    appeal_gift_ids = set(
+        appeal_win.loc[appeal_win["don_appeal_window"] >= MIN_APPEAL_GIFT, "id"]
+    )
+    if appealed_ids is not None:
+        appeal_gift_ids &= set(appealed_ids)
+    spend_3fy = engage.set_index("id")[
+        ["arts_spend_3fy", "classes_spend_3fy", "community_spend_3fy"]
+    ].sum(axis=1)
+    gave_5yr = set(gifts_fy.loc[gifts_fy[DON_FY_COLUMNS].sum(axis=1) > 0, "id"])
+    engaged_ids = set(spend_3fy[spend_3fy >= MIN_ENGAGED_NONDONOR_SPEND].index) - gave_5yr
+    ids = donor5_ids | d3_ids | na_ids | silent_ids | resp_ids | appeal_gift_ids | engaged_ids
 
     # -- base rows: every household from any source, even with no in-window gifts ---
     # (gifts_by_fy only holds households with in-window gifts; a listed household with
@@ -317,7 +406,10 @@ def build_mailing_list(
     # -- Fort Salem split (robust to a nullable/float in_neon flag) -------------------
     in_neon_flag = fst_summary["in_neon"].fillna(False).astype(bool)
     fst_neon = fst_summary[in_neon_flag]
-    fst_new = fst_summary[~in_neon_flag].copy()
+    fst_not_neon = fst_summary[~in_neon_flag]
+    keep = fst_keep_mask(fst_not_neon)
+    fst_dropped = fst_not_neon[~keep][["name", "best_tier", "n_years", "years"]].reset_index(drop=True)
+    fst_new = fst_not_neon[keep].copy()
     fst_new = fst_new.rename(
         columns={
             "name": "fst_name",
@@ -334,6 +426,7 @@ def build_mailing_list(
     # -- merges attach Neon-side facts to the id rows only; FST-new rows stay out of
     # every merge so an NA id can never key-join against anything -------------------
     table = table.merge(lifetime, on="id", how="left")
+    table = table.merge(appeal_win, on="id", how="left")
     table = table.merge(engage, on="id", how="left")
     table = table.merge(contact, on="id", how="left")
     table = table.merge(neon_ids, on="id", how="left")
@@ -360,6 +453,17 @@ def build_mailing_list(
     )
     table["household_name"] = table["household_name"].fillna(table.pop("fst_name"))
 
+    # Fort Salem candidate households for the non-exact names (review, never auto-merge)
+    candidates = fst_candidates(fst_summary, accounts)
+    if candidates.empty:
+        table["fst_candidate_id"] = pd.NA
+        table["fst_candidate_name"] = pd.NA
+    else:
+        table = table.merge(
+            candidates.rename(columns={"name": "household_name"}),
+            on="household_name", how="left",
+        )
+
     # -- flags and indicators --------------------------------------------------------
     table["in_neon"] = table["id"].notna()
     table["src_donor_5yr"] = table["id"].isin(donor5_ids)
@@ -367,6 +471,12 @@ def build_mailing_list(
     table["src_new_accounts"] = table["id"].isin(na_ids)
     table["src_silent_selected"] = table["id"].isin(silent_ids)
     table["src_appeal_responded"] = table["id"].isin(resp_ids)
+    table["src_appeal_gift"] = table["id"].isin(appeal_gift_ids)
+    table["src_engaged_nondonor"] = table["id"].isin(engaged_ids)
+    table["appealed_last_year"] = (
+        table["id"].isin(appealed_ids) if appealed_ids is not None else pd.NA
+    )
+    table["don_appeal_window"] = table["don_appeal_window"].fillna(0.0)
     table["fst"] = table["fst"].fillna(False) | table.pop("is_fst_new").fillna(False)
     table["needs_review"] = ~table["in_neon"]
 
@@ -433,4 +543,5 @@ def build_mailing_list(
     # account ids read as what they are (internal callers still use id / neon_ids)
     out = table.rename(columns={"id": "neon_hh_id", "neon_ids": "neon_account_ids"})
     out.attrs["exclusion_qa"] = exclusion_qa
+    out.attrs["fst_dropped"] = fst_dropped.to_dict(orient="records")  # JSON-safe for parquet
     return out[OUTPUT_COLUMNS]

@@ -8,6 +8,8 @@ from hh.analytics.mailing import (
     build_mailing_list,
     engagement_spend,
     fiscal_year,
+    fst_candidates,
+    fst_keep_mask,
     gifts_by_fy,
     pick_contact,
     predominant_engagement,
@@ -19,30 +21,33 @@ PLEDGE_PAYMENT = "PLEDGE" + "PAYMENT"  # built by concatenation (see test_analyt
 def _accounts():
     return pd.DataFrame(
         {
-            "account_id": ["A1", "A2", "B1", "C1"],
-            "id": ["H1", "H1", "H2", "H3"],
-            "name": ["Ann & Bob Smith", "Ann & Bob Smith", "Carol Dane", "New Person"],
-            "first_name": ["Ann", "Bob", "Carol", "New"],
-            "last_name": ["Smith", "Smith", "Dane", "Person"],
-            "household_salutation": ["Ann and Bob", None, "Carol", None],
-            "household_name": ["Ann & Bob Smith", "Ann & Bob Smith", "Carol Dane", "New Person"],
-            "full_name": [None, None, None, "New Person"],
-            "company_name": [None, None, None, None],
-            "account_type": ["Individual"] * 4,
-            "contact_type": ["Individual"] * 4,
-            "deceased": [False, False, False, False],
-            "do_not_contact": [False, False, True, False],
-            "address_line1": ["1 Main St", None, "2 Elm St", None],
-            "address_line2": [None, None, "Apt 2", None],
-            "city": ["Cambridge", None, "Salem", None],
-            "state_province": ["NY", None, "NY", None],
-            "zip_code": ["12816", None, "12865", None],
-            "phone_1": ["518-555-0100", None, None, None],
-            "email_1": [None, "bob@x.org", None, None],
+            "account_id": ["A1", "A2", "B1", "C1", "D1"],
+            "id": ["H1", "H1", "H2", "H3", "H4"],
+            "name": ["Ann & Bob Smith", "Ann & Bob Smith", "Carol Dane", "New Person",
+                     "Class Family"],
+            "first_name": ["Ann", "Bob", "Carol", "New", "Kim"],
+            "last_name": ["Smith", "Smith", "Dane", "Person", "Family"],
+            "household_salutation": ["Ann and Bob", None, "Carol", None, None],
+            "household_name": ["Ann & Bob Smith", "Ann & Bob Smith", "Carol Dane", "New Person",
+                               "Class Family"],
+            "full_name": [None, None, None, "New Person", "Kim Family"],
+            "company_name": [None] * 5,
+            "account_type": ["Individual"] * 5,
+            "contact_type": ["Individual"] * 5,
+            "deceased": [False] * 5,
+            "do_not_contact": [False, False, True, False, False],
+            "address_line1": ["1 Main St", None, "2 Elm St", None, "9 School St"],
+            "address_line2": [None, None, "Apt 2", None, None],
+            "city": ["Cambridge", None, "Salem", None, "Cambridge"],
+            "state_province": ["NY", None, "NY", None, "NY"],
+            "zip_code": ["12816", None, "12865", None, "12816"],
+            "phone_1": ["518-555-0100", None, None, None, None],
+            "email_1": [None, "bob@x.org", None, None, "kim@x.org"],
             "household_salutation_": pd.NA,
-            "account_created_at": ["2020-01-01", "2019-01-01", "2024-08-01", "2025-10-01"],
-            "account_note_text": [None, None, "longtime volunteer", None],
-            "distance_miles": [0.5, 0.5, 8.0, None],
+            "account_created_at": ["2020-01-01", "2019-01-01", "2024-08-01", "2025-10-01",
+                                   "2022-03-01"],
+            "account_note_text": [None, None, "longtime volunteer", None, None],
+            "distance_miles": [0.5, 0.5, 8.0, None, 1.0],
         }
     )
 
@@ -70,11 +75,13 @@ def _donations():
 def _registrations():
     return pd.DataFrame(
         {
-            "registration_id": ["r1", "r2", "r3", "r4"],
-            "household_id": ["H1", "H1", "H2", "H3"],
-            "starts_on": pd.to_datetime(["2025-01-15", "2025-02-01", "2024-09-01", "2015-01-01"]),
-            "event_majorcat": ["performance", "class", "other", "performance"],
-            "amount": [40.0, 120.0, 75.0, 30.0],
+            "registration_id": ["r1", "r2", "r3", "r4", "r5", "r6"],
+            "id": ["H1", "H1", "H2", "H3", "H4", "H4"],  # rollup id (NA household_id for singles)
+            "starts_on": pd.to_datetime(
+                ["2025-01-15", "2025-02-01", "2024-09-01", "2015-01-01", "2024-10-01", "2025-10-01"]
+            ),
+            "event_majorcat": ["performance", "class", "other", "performance", "class", "class"],
+            "amount": [40.0, 120.0, 75.0, 30.0, 300.0, 250.0],
         }
     )
 
@@ -140,7 +147,7 @@ def test_new_codes_in_name_order():
     assert codes.tolist() == ["new3", "new1", "new2"]  # Able, Mid, Zed order
 
 
-def test_apply_exclusions_deceased_notes_and_small_donor_floor():
+def test_apply_exclusions_deceased_notes_and_donor_floor():
     table = pd.DataFrame(
         {
             "household_name": [
@@ -148,33 +155,70 @@ def test_apply_exclusions_deceased_notes_and_small_donor_floor():
                 "Note Gone",          # hand note says died
                 "Survivor",           # note says died AND a partner survives -> kept
                 "Neon Note Only",     # death only in a NEON staff note -> kept
-                "Small Donor",        # donor-rule only, under $100 -> dropped
-                "Small Curated",      # under $100 but on Judy's list -> kept
-                "Big Donor",          # donor-rule only, over $100 -> kept
+                "Small Donor",        # donor-rule only, under $200 -> dropped
+                "Small Judy Note",    # under $200 with a hand note -> kept
+                "Small Stewarded",    # under $200 with a steward -> kept
+                "Small Responder",    # under $200 but responded to the appeal -> kept
+                "Small Silent",       # under $200 but on the bolded keep-list -> kept
+                "Small Judy Bare",    # under $200, Judy's list, no note/steward -> dropped
+                "Big Donor",          # donor-rule only, over $200 -> kept
                 "Zero Prospect",      # never donated, not donor-rule -> kept (new account)
             ],
-            "id": ["1", "2", "3", "4", "5", "6", "7", "8"],
-            "deceased": [True, False, False, False, False, False, False, False],
+            "id": [str(i) for i in range(1, 13)],
+            "deceased": [True] + [False] * 11,
             "note_donor3": [None, "died 2024", "Tim has died; wife/gf still around",
-                            None, None, None, None, None],
-            "note_neon": [None, None, None, "my uncle passed away; we still attend",
-                          None, None, None, None],
-            "src_donor_5yr": [True, True, True, True, True, True, True, False],
-            "src_donor3": [False, False, False, False, False, True, False, False],
-            "src_new_accounts": [False, False, False, False, False, False, False, True],
-            "src_appeal_responded": [False] * 8,
-            "src_silent_selected": [False] * 8,
-            "don_5yr_total": [500.0, 500.0, 500.0, 500.0, 50.0, 50.0, 500.0, 0.0],
+                            None, None, "friend of the house", None, None, None,
+                            None, None, None],
+            "note_neon": [None, None, None, "my uncle passed away; we still attend"]
+                        + [None] * 8,
+            "steward": [None] * 6 + ["don"] + [None] * 5,  # Small Stewarded has one
+            "src_donor_5yr": [True] * 4 + [True] * 6 + [True, False],
+            "src_donor3": [False] * 5 + [False, False, False, False, True, False, False],
+            "src_new_accounts": [False] * 11 + [True],
+            "src_appeal_responded": [False] * 7 + [True] + [False] * 4,
+            "src_appeal_gift": [False] * 12,
+            "src_engaged_nondonor": [False] * 12,
+            "src_silent_selected": [False] * 8 + [True] + [False] * 3,
+            "fst": [False] * 12,
+            "don_5yr_total": [500.0] * 4 + [100.0] * 6 + [500.0, 0.0],
         }
     )
     out, qa = apply_exclusions(table)
     assert out["household_name"].tolist() == [
-        "Survivor", "Neon Note Only", "Small Curated", "Big Donor", "Zero Prospect",
+        "Survivor", "Neon Note Only", "Small Judy Note", "Small Stewarded",
+        "Small Responder", "Small Silent", "Big Donor", "Zero Prospect",
     ]
     assert qa["dropped_deceased_neon"] == ["Neon Gone"]
     assert qa["dropped_deceased_note"] == ["Note Gone"]
     assert qa["kept_deceased_note_survivor"] == ["Survivor"]
-    assert qa["dropped_small_donor"] == ["Small Donor"]
+    assert qa["dropped_small_donor"] == ["Small Donor", "Small Judy Bare"]
+
+
+def test_fst_candidates_unique_ambiguous_and_none():
+    accounts = pd.DataFrame(
+        {
+            "id": ["H1", "H2", "H3", "H4"],
+            "name": ["Jared and Kyle West", "Rich Butler", "Pat Doe", "Ann Lee"],
+            "full_name": ["Jared West", None, "Pat Doe", "Ann Lee"],
+            "contact_type": ["Individual"] * 4,
+        }
+    )
+    fst_summary = pd.DataFrame(
+        {
+            "name": ["Kyle & Jared West", "Richard Butler", "Ann Lee",
+                     "Sue Doe", "Chris Doe"],
+            "in_neon": [False, False, True, False, False],
+        }
+    )
+    out = fst_candidates(fst_summary, accounts).set_index("name")
+    # partner-order flip still finds the household
+    assert out.loc["Kyle & Jared West", "fst_candidate_id"] == "H1"
+    assert out.loc["Kyle & Jared West", "fst_candidate_name"] == "Jared and Kyle West"
+    # nickname (rich/richard) finds it via the member account name
+    assert out.loc["Richard Butler", "fst_candidate_id"] == "H2"
+    assert "Ann Lee" not in out.index  # exact match already -> no candidate needed
+    assert "Sue Doe" not in out.index  # no compatible given name anywhere
+    assert "Chris Doe" not in out.index  # 'chris' is compatible with no pool given name
 
 
 def _externals():
@@ -201,7 +245,7 @@ def _externals():
             "name": ["Carol Dane", "Zed Sponsor"],
             "n_years": [2, 1],
             "years": ["2024,2025", "2025"],
-            "best_tier": ["gold", "friends of fort salem"],
+            "best_tier": ["gold", "inner circle"],  # Zed: $100+ tier -> kept by rule B
             "anonymous": [False, False],
             "org": [False, False],
             "id": ["H2", pd.NA],
@@ -230,6 +274,10 @@ def test_build_mailing_list_end_to_end():
     h1 = table.loc["Ann & Bob Smith"]
     assert h1["src_appeal_responded"]
     assert h1["src_donor_5yr"]  # 5yr total $2,037.50 >= $10
+    # H2's $500 gift on 2025-11-01 falls in the Oct 2025-Jan 2026 campaign window
+    h2w = table.loc["Carol Dane"]
+    assert h2w["don_appeal_window"] == 500.0 and h2w["src_appeal_gift"]
+    assert h1["don_appeal_window"] == 0.0 and not h1["src_appeal_gift"]
     assert h1["don_lifetime"] == 5.0 + 10.0 + 2022.5  # H1's own lifetime gifts only
     assert h1["predominant_engagement"] == "both"
     assert h1["neon_account_ids"] == "A1,A2"
@@ -248,11 +296,29 @@ def test_build_mailing_list_end_to_end():
     assert h3["no_gift_last_5yrs"] and not h3["never_donated"]
     assert h3["src_new_accounts"] and h3["note_new"] == "came to gala"
 
+    # H4: never gave, but $550 of classes in FY25-26 -> engaged non-donor, exempt from floor
+    h4 = table.loc["Class Family"]
+    assert h4["src_engaged_nondonor"] and h4["never_donated"]
+    assert h4["predominant_engagement"] == "classes" and h4["classes_spend_3fy"] == 550.0
+
     # Zed Sponsor: Fort Salem only, not in Neon -> new code, needs review, zeros
     zed = table.loc["Zed Sponsor"]
     assert zed["new_code"] == "new1" and zed["needs_review"] and zed["fst"]
     assert zed["never_donated"] and zed["predominant_engagement"] == "none"
-    assert zed["fst_best_tier"] == "friends of fort salem"
+    assert zed["fst_best_tier"] == "inner circle"
 
     # one row per household, sorted by name
     assert table.index.is_unique
+
+
+def test_fst_keep_mask_rule_b():
+    fst = pd.DataFrame(
+        {
+            "name": ["Friend Once", "Friend Twice", "Inner Once", "Angel 2020", "Angel Back", "Gold"],
+            "best_tier": ["friends of fort salem", "friends of fort salem", "inner circle",
+                          "opening angels", "opening angels", "gold"],
+            "n_years": [1, 2, 1, 1, 2, 1],
+            "years": ["2024", "2023,2025", "2022", "2020", "2020,2023", "2021"],
+        }
+    )
+    assert fst_keep_mask(fst).tolist() == [False, True, True, False, True, True]

@@ -9,6 +9,7 @@ from hh.external.mailing import (
     load_new_accounts,
     match_households,
     norm_name,
+    qualifying_new_accounts,
 )
 
 
@@ -197,3 +198,17 @@ def test_load_djb_workbook_bolds_notes_and_responded(tmp_path):
     responded = out["appeal_responded"]
     assert responded["household_name"].tolist() == ["A Donor"]
     assert responded.iloc[0]["note_hand"] == "gave $500"
+
+
+def test_qualifying_new_accounts_applies_registration_floor():
+    na = pd.DataFrame(
+        {
+            "household_name": ["Big Spender", "Small Spender", "Blank"],
+            "lifetime_registration_amount": [250.0, 45.0, None],
+        }
+    )
+    out = qualifying_new_accounts(na)
+    assert out["household_name"].tolist() == ["Big Spender"]
+    assert qualifying_new_accounts(na, min_registration=0)["household_name"].tolist() == [
+        "Big Spender", "Small Spender", "Blank",
+    ]

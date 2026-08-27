@@ -38,16 +38,19 @@ def _ext_path(filename: str) -> Path:
 
 # -- name matching --------------------------------------------------------------
 def norm_name(series: pd.Series) -> pd.Series:
-    """Normalize a household-name column for matching: casefold, collapse internal whitespace.
+    """Normalize a household-name column for matching.
 
-    Judy's export contains at least one double-spaced name ("andrea  strebel"), so a plain
-    lower/strip join would miss real matches.
+    Casefold, collapse internal whitespace, and treat ``and`` / ``&`` as the same joiner
+    ("Don Boyd and Tracey Hitchen Boyd" on Fort Salem's page is Neon's "Don Boyd & Tracey
+    Hitchen Boyd"). Judy's export also has a double-spaced name ("andrea  strebel"), so a
+    plain lower/strip join would miss real matches.
     """
     return (
         series.astype("string")
         .str.strip()
         .str.lower()
         .str.replace(r"\s+", " ", regex=True)
+        .str.replace(r"\s+and\s+", " & ", regex=True)
     )
 
 
@@ -189,6 +192,20 @@ NEW_ACCOUNTS_COLUMNS = {
     "2025 HH/Acct. Donation Total": "y2025_amount",
     "HH/Acct. All Registration Amount": "lifetime_registration_amount",
 }
+
+
+# Judy's "HH/Acct. All Registration Amount" floor for a new account to make the list:
+# a new account with under this in lifetime registrations is a one-time ticket buyer,
+# not a prospect (Don, 2026-08-28). Rows with a hand note all clear it in the 2026-08 data.
+MIN_NEW_ACCOUNT_REGISTRATION = 100.0
+
+
+def qualifying_new_accounts(
+    new_accounts: pd.DataFrame, *, min_registration: float = MIN_NEW_ACCOUNT_REGISTRATION
+) -> pd.DataFrame:
+    """New-account rows whose lifetime registration amount reaches the floor."""
+    amount = pd.to_numeric(new_accounts["lifetime_registration_amount"], errors="coerce")
+    return new_accounts[amount.fillna(0) >= min_registration].reset_index(drop=True)
 
 
 def load_new_accounts(path: Path | None = None) -> pd.DataFrame:
