@@ -170,6 +170,7 @@ def test_apply_exclusions_deceased_notes_and_donor_floor():
             "src_donor3": [False] * 5 + [False, False, False, False, True, False, False],
             "src_new_accounts": [False] * 11 + [True],
             "src_appeal_responded": [False] * 7 + [True] + [False] * 4,
+            "src_appeal_gift": [False] * 12,
             "src_silent_selected": [False] * 8 + [True] + [False] * 3,
             "fst": [False] * 12,
             "don_5yr_total": [500.0] * 4 + [100.0] * 6 + [500.0, 0.0],
@@ -266,6 +267,10 @@ def test_build_mailing_list_end_to_end():
     h1 = table.loc["Ann & Bob Smith"]
     assert h1["src_appeal_responded"]
     assert h1["src_donor_5yr"]  # 5yr total $2,037.50 >= $10
+    # H2's $500 gift on 2025-11-01 falls in the Oct 2025-Jan 2026 campaign window
+    h2w = table.loc["Carol Dane"]
+    assert h2w["don_appeal_window"] == 500.0 and h2w["src_appeal_gift"]
+    assert h1["don_appeal_window"] == 0.0 and not h1["src_appeal_gift"]
     assert h1["don_lifetime"] == 5.0 + 10.0 + 2022.5  # H1's own lifetime gifts only
     assert h1["predominant_engagement"] == "both"
     assert h1["neon_account_ids"] == "A1,A2"

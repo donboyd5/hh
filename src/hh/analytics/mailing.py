@@ -40,6 +40,13 @@ DE_MINIMIS_5YR = 10.0
 # rows under this 5-year total are dropped unless keep-identified (Don, 2026-08-27)
 MIN_DONOR_5YR = 200.0
 
+# last year's annual-campaign period: anyone who gave at least this much in the window is
+# kept regardless of the floor (Don, 2026-08-28). Any successful gift counts, not just
+# those Judy coded to the Annual Fund Drive campaign — a gift during the appeal is a
+# response whichever bucket it landed in (Misc Donation, Sustaining Donor, ...).
+APPEAL_WINDOW = (pd.Timestamp("2025-10-01"), pd.Timestamp("2026-01-31"))
+MIN_APPEAL_GIFT = 10.0
+
 # a note that says someone died — unless it also says someone survives (e.g. Don's
 # "Tim has died; wife/gf still around; Sue will contact" keeps the household: mail
 # goes to the survivor). Only explicit survivor phrases guard: "husband died 2024"
@@ -64,14 +71,14 @@ OUTPUT_COLUMNS = [
     # the three codes, then the household name
     "neon_hh_id", "neon_account_ids", "new_code", "household_name",
     # donation history
-    *DON_FY_COLUMNS, "don_5yr_total", "don_lifetime",
+    *DON_FY_COLUMNS, "don_5yr_total", "don_lifetime", "don_appeal_window",
     # contact info
     "contact_first_name", "contact_last_name", "salutation", "address", "city",
     "state_province", "zip_code", "phone", "email",
     # everything else: identity/source flags, indicators, engagement, stewardship,
     # notes, Fort Salem detail
     "in_neon", "src_donor_5yr", "src_donor3", "src_new_accounts",
-    "src_appeal_responded", "src_silent_selected", "fst", "needs_review",
+    "src_appeal_responded", "src_appeal_gift", "src_silent_selected", "fst", "needs_review",
     "never_donated", "gave_fy26", "gave_fy25", "no_gift_last_5yrs",
     "arts_spend_3fy", "classes_spend_3fy", "community_spend_3fy", "regs_3fy",
     "predominant_engagement", "do_not_contact", "deceased", "distance_miles",
@@ -98,6 +105,19 @@ def gifts_by_fy(donations: pd.DataFrame, fys: tuple[int, ...]) -> pd.DataFrame:
     table = table.reindex(columns=list(fys), fill_value=0.0)
     table.columns = [f"don_fy{int(c)}" for c in table.columns]
     return table.reset_index()
+
+
+def appeal_window_gifts(
+    donations: pd.DataFrame,
+    *,
+    window: tuple[pd.Timestamp, pd.Timestamp] = APPEAL_WINDOW,
+) -> pd.DataFrame:
+    """Household succeeded-gift totals inside the annual-campaign window -> [id, don_appeal_window]."""
+    g = succeeded_individual_gifts(donations)
+    g = g[g["donation_date"].between(window[0], window[1])]
+    return (
+        g.groupby("id")["donation_amount"].sum().rename("don_appeal_window").reset_index()
+    )
 
 
 def engagement_spend(registrations: pd.DataFrame, fys: tuple[int, ...]) -> pd.DataFrame:
@@ -228,8 +248,9 @@ def apply_exclusions(
       since the mail then goes to the surviving partner.
     - **Small givers**: rows with under ``min_donor_5yr`` ($200) in 5 years drop unless
       keep-identified — a new person (Judy's new-accounts list, or Fort Salem), one of
-      Don's hand notes or a steward assignment, the bolded silent keep-list, or an appeal
-      responder (Don, 2026-08-27). Neon staff notes do not identify a keeper, consistent
+      Don's hand notes or a steward assignment, the bolded silent keep-list, an appeal
+      responder, or a household that gave >= $10 in last year's campaign window
+      (Don, 2026-08-27/28). Neon staff notes do not identify a keeper, consistent
       with the deceased scan.
 
     QA names every dropped household and why, so nothing disappears silently.
@@ -246,6 +267,7 @@ def apply_exclusions(
         | table["fst"].fillna(False)
         | table["src_silent_selected"].fillna(False)
         | table["src_appeal_responded"].fillna(False)
+        | table["src_appeal_gift"].fillna(False)
         | (notes.str.len() > 0)
         | table["steward"].notna()
     )
@@ -315,6 +337,7 @@ def build_mailing_list(
         .groupby("id")["donation_amount"].sum().rename("don_lifetime").reset_index()
     )
     engage = engagement_spend(registrations, ENGAGEMENT_FYS)
+    appeal_win = appeal_window_gifts(donations)
     contact = pick_contact(accounts, donations)
     neon_ids = neon_ids_by_household(accounts)
 
@@ -324,7 +347,10 @@ def build_mailing_list(
     na_ids = set(new_accounts["id"].dropna())
     silent_ids = set(silent_selected["id"].dropna())
     resp_ids = set(appeal_responded["id"].dropna())
-    ids = donor5_ids | d3_ids | na_ids | silent_ids | resp_ids
+    appeal_gift_ids = set(
+        appeal_win.loc[appeal_win["don_appeal_window"] >= MIN_APPEAL_GIFT, "id"]
+    )
+    ids = donor5_ids | d3_ids | na_ids | silent_ids | resp_ids | appeal_gift_ids
 
     # -- base rows: every household from any source, even with no in-window gifts ---
     # (gifts_by_fy only holds households with in-window gifts; a listed household with
@@ -354,6 +380,7 @@ def build_mailing_list(
     # -- merges attach Neon-side facts to the id rows only; FST-new rows stay out of
     # every merge so an NA id can never key-join against anything -------------------
     table = table.merge(lifetime, on="id", how="left")
+    table = table.merge(appeal_win, on="id", how="left")
     table = table.merge(engage, on="id", how="left")
     table = table.merge(contact, on="id", how="left")
     table = table.merge(neon_ids, on="id", how="left")
@@ -398,6 +425,8 @@ def build_mailing_list(
     table["src_new_accounts"] = table["id"].isin(na_ids)
     table["src_silent_selected"] = table["id"].isin(silent_ids)
     table["src_appeal_responded"] = table["id"].isin(resp_ids)
+    table["src_appeal_gift"] = table["id"].isin(appeal_gift_ids)
+    table["don_appeal_window"] = table["don_appeal_window"].fillna(0.0)
     table["fst"] = table["fst"].fillna(False) | table.pop("is_fst_new").fillna(False)
     table["needs_review"] = ~table["in_neon"]
 
