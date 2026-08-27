@@ -20,30 +20,33 @@ PLEDGE_PAYMENT = "PLEDGE" + "PAYMENT"  # built by concatenation (see test_analyt
 def _accounts():
     return pd.DataFrame(
         {
-            "account_id": ["A1", "A2", "B1", "C1"],
-            "id": ["H1", "H1", "H2", "H3"],
-            "name": ["Ann & Bob Smith", "Ann & Bob Smith", "Carol Dane", "New Person"],
-            "first_name": ["Ann", "Bob", "Carol", "New"],
-            "last_name": ["Smith", "Smith", "Dane", "Person"],
-            "household_salutation": ["Ann and Bob", None, "Carol", None],
-            "household_name": ["Ann & Bob Smith", "Ann & Bob Smith", "Carol Dane", "New Person"],
-            "full_name": [None, None, None, "New Person"],
-            "company_name": [None, None, None, None],
-            "account_type": ["Individual"] * 4,
-            "contact_type": ["Individual"] * 4,
-            "deceased": [False, False, False, False],
-            "do_not_contact": [False, False, True, False],
-            "address_line1": ["1 Main St", None, "2 Elm St", None],
-            "address_line2": [None, None, "Apt 2", None],
-            "city": ["Cambridge", None, "Salem", None],
-            "state_province": ["NY", None, "NY", None],
-            "zip_code": ["12816", None, "12865", None],
-            "phone_1": ["518-555-0100", None, None, None],
-            "email_1": [None, "bob@x.org", None, None],
+            "account_id": ["A1", "A2", "B1", "C1", "D1"],
+            "id": ["H1", "H1", "H2", "H3", "H4"],
+            "name": ["Ann & Bob Smith", "Ann & Bob Smith", "Carol Dane", "New Person",
+                     "Class Family"],
+            "first_name": ["Ann", "Bob", "Carol", "New", "Kim"],
+            "last_name": ["Smith", "Smith", "Dane", "Person", "Family"],
+            "household_salutation": ["Ann and Bob", None, "Carol", None, None],
+            "household_name": ["Ann & Bob Smith", "Ann & Bob Smith", "Carol Dane", "New Person",
+                               "Class Family"],
+            "full_name": [None, None, None, "New Person", "Kim Family"],
+            "company_name": [None] * 5,
+            "account_type": ["Individual"] * 5,
+            "contact_type": ["Individual"] * 5,
+            "deceased": [False] * 5,
+            "do_not_contact": [False, False, True, False, False],
+            "address_line1": ["1 Main St", None, "2 Elm St", None, "9 School St"],
+            "address_line2": [None, None, "Apt 2", None, None],
+            "city": ["Cambridge", None, "Salem", None, "Cambridge"],
+            "state_province": ["NY", None, "NY", None, "NY"],
+            "zip_code": ["12816", None, "12865", None, "12816"],
+            "phone_1": ["518-555-0100", None, None, None, None],
+            "email_1": [None, "bob@x.org", None, None, "kim@x.org"],
             "household_salutation_": pd.NA,
-            "account_created_at": ["2020-01-01", "2019-01-01", "2024-08-01", "2025-10-01"],
-            "account_note_text": [None, None, "longtime volunteer", None],
-            "distance_miles": [0.5, 0.5, 8.0, None],
+            "account_created_at": ["2020-01-01", "2019-01-01", "2024-08-01", "2025-10-01",
+                                   "2022-03-01"],
+            "account_note_text": [None, None, "longtime volunteer", None, None],
+            "distance_miles": [0.5, 0.5, 8.0, None, 1.0],
         }
     )
 
@@ -71,11 +74,13 @@ def _donations():
 def _registrations():
     return pd.DataFrame(
         {
-            "registration_id": ["r1", "r2", "r3", "r4"],
-            "id": ["H1", "H1", "H2", "H3"],  # rollup id (NA household_id for singles)
-            "starts_on": pd.to_datetime(["2025-01-15", "2025-02-01", "2024-09-01", "2015-01-01"]),
-            "event_majorcat": ["performance", "class", "other", "performance"],
-            "amount": [40.0, 120.0, 75.0, 30.0],
+            "registration_id": ["r1", "r2", "r3", "r4", "r5", "r6"],
+            "id": ["H1", "H1", "H2", "H3", "H4", "H4"],  # rollup id (NA household_id for singles)
+            "starts_on": pd.to_datetime(
+                ["2025-01-15", "2025-02-01", "2024-09-01", "2015-01-01", "2024-10-01", "2025-10-01"]
+            ),
+            "event_majorcat": ["performance", "class", "other", "performance", "class", "class"],
+            "amount": [40.0, 120.0, 75.0, 30.0, 300.0, 250.0],
         }
     )
 
@@ -171,6 +176,7 @@ def test_apply_exclusions_deceased_notes_and_donor_floor():
             "src_new_accounts": [False] * 11 + [True],
             "src_appeal_responded": [False] * 7 + [True] + [False] * 4,
             "src_appeal_gift": [False] * 12,
+            "src_engaged_nondonor": [False] * 12,
             "src_silent_selected": [False] * 8 + [True] + [False] * 3,
             "fst": [False] * 12,
             "don_5yr_total": [500.0] * 4 + [100.0] * 6 + [500.0, 0.0],
@@ -288,6 +294,11 @@ def test_build_mailing_list_end_to_end():
     h3 = table.loc["New Person"]
     assert h3["no_gift_last_5yrs"] and not h3["never_donated"]
     assert h3["src_new_accounts"] and h3["note_new"] == "came to gala"
+
+    # H4: never gave, but $550 of classes in FY25-26 -> engaged non-donor, exempt from floor
+    h4 = table.loc["Class Family"]
+    assert h4["src_engaged_nondonor"] and h4["never_donated"]
+    assert h4["predominant_engagement"] == "classes" and h4["classes_spend_3fy"] == 550.0
 
     # Zed Sponsor: Fort Salem only, not in Neon -> new code, needs review, zeros
     zed = table.loc["Zed Sponsor"]

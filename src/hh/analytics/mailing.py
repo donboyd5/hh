@@ -49,6 +49,12 @@ MIN_DONOR_5YR = 200.0
 APPEAL_WINDOW = (pd.Timestamp("2025-10-01"), pd.Timestamp("2026-01-31"))
 MIN_APPEAL_GIFT = 10.0
 
+# engaged non-donors: households with no successful gift in the 5-year window but at
+# least this much FY24-26 registration spending (arts + classes + community) enter the
+# list and are exempt from the giving floor (Don, 2026-08-28). In practice this is the
+# parents-of-class-kids pool — families spending $500-$4,000 on classes with zero gifts.
+MIN_ENGAGED_NONDONOR_SPEND = 500.0
+
 # a note that says someone died — unless it also says someone survives (e.g. Don's
 # "Tim has died; wife/gf still around; Sue will contact" keeps the household: mail
 # goes to the survivor). Only explicit survivor phrases guard: "husband died 2024"
@@ -81,7 +87,7 @@ OUTPUT_COLUMNS = [
     # notes, Fort Salem detail
     "in_neon", "src_donor_5yr", "src_donor3", "src_new_accounts",
     "src_appeal_responded", "src_appeal_gift", "appealed_last_year", "src_silent_selected",
-    "fst", "needs_review",
+    "src_engaged_nondonor", "fst", "needs_review",
     "never_donated", "gave_fy26", "gave_fy25", "no_gift_last_5yrs",
     "arts_spend_3fy", "classes_spend_3fy", "community_spend_3fy", "regs_3fy",
     "predominant_engagement", "do_not_contact", "deceased", "distance_miles",
@@ -252,8 +258,8 @@ def apply_exclusions(
     - **Small givers**: rows with under ``min_donor_5yr`` ($200) in 5 years drop unless
       keep-identified — a new person (Judy's new-accounts list, or Fort Salem), one of
       Don's hand notes or a steward assignment, the bolded silent keep-list, an appeal
-      responder, or a household that gave >= $10 in last year's campaign window
-      (Don, 2026-08-27/28). Neon staff notes do not identify a keeper, consistent
+      responder, a household that gave >= $10 in last year's campaign window, or an
+      engaged non-donor (>= $500 FY24-26 spending, no 5-year gift) (Don, 2026-08-27/28). Neon staff notes do not identify a keeper, consistent
       with the deceased scan.
 
     QA names every dropped household and why, so nothing disappears silently.
@@ -271,6 +277,7 @@ def apply_exclusions(
         | table["src_silent_selected"].fillna(False)
         | table["src_appeal_responded"].fillna(False)
         | table["src_appeal_gift"].fillna(False)
+        | table["src_engaged_nondonor"].fillna(False)
         | (notes.str.len() > 0)
         | table["steward"].notna()
     )
@@ -358,7 +365,12 @@ def build_mailing_list(
     )
     if appealed_ids is not None:
         appeal_gift_ids &= set(appealed_ids)
-    ids = donor5_ids | d3_ids | na_ids | silent_ids | resp_ids | appeal_gift_ids
+    spend_3fy = engage.set_index("id")[
+        ["arts_spend_3fy", "classes_spend_3fy", "community_spend_3fy"]
+    ].sum(axis=1)
+    gave_5yr = set(gifts_fy.loc[gifts_fy[DON_FY_COLUMNS].sum(axis=1) > 0, "id"])
+    engaged_ids = set(spend_3fy[spend_3fy >= MIN_ENGAGED_NONDONOR_SPEND].index) - gave_5yr
+    ids = donor5_ids | d3_ids | na_ids | silent_ids | resp_ids | appeal_gift_ids | engaged_ids
 
     # -- base rows: every household from any source, even with no in-window gifts ---
     # (gifts_by_fy only holds households with in-window gifts; a listed household with
@@ -434,6 +446,7 @@ def build_mailing_list(
     table["src_silent_selected"] = table["id"].isin(silent_ids)
     table["src_appeal_responded"] = table["id"].isin(resp_ids)
     table["src_appeal_gift"] = table["id"].isin(appeal_gift_ids)
+    table["src_engaged_nondonor"] = table["id"].isin(engaged_ids)
     table["appealed_last_year"] = (
         table["id"].isin(appealed_ids) if appealed_ids is not None else pd.NA
     )

@@ -229,7 +229,8 @@ def main() -> None:
                     "rows", "in_neon", "needs_review (Fort Salem, not in Neon)",
                     "src_donor_5yr", "src_donor3", "src_new_accounts",
                     "src_silent_selected", "src_appeal_responded",
-                    "src_appeal_gift (>= $10 in Oct 2025-Jan 2026)", "fst flagged",
+                    "src_appeal_gift (>= $10 in Oct 2025-Jan 2026)",
+                    "src_engaged_nondonor (>= $500 FY24-26 spend, no gift)", "fst flagged",
                     "do_not_contact", "deceased",
                 ],
                 "detail": [
@@ -242,6 +243,7 @@ def main() -> None:
                     int(table["src_silent_selected"].sum()),
                     int(table["src_appeal_responded"].sum()),
                     int(table["src_appeal_gift"].sum()),
+                    int(table["src_engaged_nondonor"].sum()),
                     int(table["fst"].sum()),
                     int(table["do_not_contact"].fillna(False).sum()),
                     int(table["deceased"].fillna(False).sum()),
