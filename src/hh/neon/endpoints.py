@@ -51,7 +51,18 @@ OUTPUT_FIELDS: dict[str, list[str]] = {
         "Household Name",
         "Contact Type",
         "Deceased",
+        "Deceased Date",
         "Do Not Contact",
+        # Mailing-list fields (added 2026-08-27): salutations for mail merges, account age
+        # for the "new household" indicator, and the account's note for context. The note
+        # fields surface only the account's (latest) note — a full notes sweep would need
+        # per-account GETs; see docs before relying on multi-note history.
+        "Household Salutation",
+        "Salutation",
+        "Account Created Date/Time",
+        "Account Note Text",
+        "Account Note Title",
+        "Account Note Created Date",
         "Full Street Address (F)",
         "Address Line 1",
         "Address Line 2",
