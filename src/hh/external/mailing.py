@@ -38,16 +38,19 @@ def _ext_path(filename: str) -> Path:
 
 # -- name matching --------------------------------------------------------------
 def norm_name(series: pd.Series) -> pd.Series:
-    """Normalize a household-name column for matching: casefold, collapse internal whitespace.
+    """Normalize a household-name column for matching.
 
-    Judy's export contains at least one double-spaced name ("andrea  strebel"), so a plain
-    lower/strip join would miss real matches.
+    Casefold, collapse internal whitespace, and treat ``and`` / ``&`` as the same joiner
+    ("Don Boyd and Tracey Hitchen Boyd" on Fort Salem's page is Neon's "Don Boyd & Tracey
+    Hitchen Boyd"). Judy's export also has a double-spaced name ("andrea  strebel"), so a
+    plain lower/strip join would miss real matches.
     """
     return (
         series.astype("string")
         .str.strip()
         .str.lower()
         .str.replace(r"\s+", " ", regex=True)
+        .str.replace(r"\s+and\s+", " & ", regex=True)
     )
 
 
