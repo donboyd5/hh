@@ -35,3 +35,24 @@ def load_boyd_notes(path: Path | None = None) -> dict[str, str]:
         for k, v in entries.items()
         if isinstance(v, dict) and v.get("note")
     }
+
+
+FST_WEB_NOTES_FILENAME = "fst-web-notes.yaml"
+
+
+def load_fst_web_notes(path: Path | None = None) -> dict[str, str]:
+    """Web-research notes on Fort Salem candidate matches, ``{fort salem name: note}``.
+
+    Hand-maintained (Claude + Don) under ``data/30_external`` — local only, it names
+    people and cites people-search pages. Each entry is ``{name: {note, sources}}``;
+    the note is shown on the workbook's fst-candidates sheet, the sources stay in the file.
+    """
+    src = Path(path) if path is not None else config.layer_dir("external") / FST_WEB_NOTES_FILENAME
+    if not src.exists():
+        return {}
+    loaded = yaml.safe_load(src.read_text()) or {}
+    return {
+        str(k): v["note"]
+        for k, v in (loaded.get("notes") or {}).items()
+        if isinstance(v, dict) and v.get("note")
+    }

@@ -40,10 +40,12 @@ DE_MINIMIS_5YR = 10.0
 # rows under this 5-year total are dropped unless keep-identified (Don, 2026-08-27)
 MIN_DONOR_5YR = 200.0
 
-# last year's annual-campaign period: anyone who gave at least this much in the window is
-# kept regardless of the floor (Don, 2026-08-28). Any successful gift counts, not just
-# those Judy coded to the Annual Fund Drive campaign — a gift during the appeal is a
-# response whichever bucket it landed in (Misc Donation, Sustaining Donor, ...).
+# last year's annual-campaign period: a household that RECEIVED the appeal (appealed=TRUE
+# in the appeal workbook) and gave at least this much in the window is kept regardless of
+# the floor (Don, 2026-08-28). Any successful gift counts, not just those Judy coded to
+# the Annual Fund Drive campaign — a gift during the appeal is a response whichever
+# bucket it landed in (Misc Donation, Sustaining Donor, ...); the appealed restriction
+# is what excludes sustainer autopayments from people who were never mailed.
 APPEAL_WINDOW = (pd.Timestamp("2025-10-01"), pd.Timestamp("2026-01-31"))
 MIN_APPEAL_GIFT = 10.0
 
@@ -78,7 +80,8 @@ OUTPUT_COLUMNS = [
     # everything else: identity/source flags, indicators, engagement, stewardship,
     # notes, Fort Salem detail
     "in_neon", "src_donor_5yr", "src_donor3", "src_new_accounts",
-    "src_appeal_responded", "src_appeal_gift", "src_silent_selected", "fst", "needs_review",
+    "src_appeal_responded", "src_appeal_gift", "appealed_last_year", "src_silent_selected",
+    "fst", "needs_review",
     "never_donated", "gave_fy26", "gave_fy25", "no_gift_last_5yrs",
     "arts_spend_3fy", "classes_spend_3fy", "community_spend_3fy", "regs_3fy",
     "predominant_engagement", "do_not_contact", "deceased", "distance_miles",
@@ -319,13 +322,16 @@ def build_mailing_list(
     appeal_responded: pd.DataFrame,
     fst_summary: pd.DataFrame,
     boyd_notes: dict[str, str] | None = None,
+    appealed_ids: set[str] | None = None,
 ) -> pd.DataFrame:
     """Assemble the mailing list.
 
     External frames are keyed by matched rollup ``id`` (from
     :func:`hh.external.mailing.match_households`); ``fst_summary`` additionally carries
     ``in_neon`` (bool). ``boyd_notes`` is Don's ``{rollup id: note}`` file
-    (:func:`hh.external.notes.load_boyd_notes`). Returns one row per household in
+    (:func:`hh.external.notes.load_boyd_notes`). ``appealed_ids`` are the rollup ids that
+    received last year's appeal (``appeal_households.appealed``); the campaign-window keep
+    rule applies only to them (None = no restriction, for tests). Returns one row per household in
     :data:`OUTPUT_COLUMNS` order; the exclusion QA (who was dropped and why) rides
     along on ``table.attrs["exclusion_qa"]``.
     """
@@ -350,6 +356,8 @@ def build_mailing_list(
     appeal_gift_ids = set(
         appeal_win.loc[appeal_win["don_appeal_window"] >= MIN_APPEAL_GIFT, "id"]
     )
+    if appealed_ids is not None:
+        appeal_gift_ids &= set(appealed_ids)
     ids = donor5_ids | d3_ids | na_ids | silent_ids | resp_ids | appeal_gift_ids
 
     # -- base rows: every household from any source, even with no in-window gifts ---
@@ -426,6 +434,9 @@ def build_mailing_list(
     table["src_silent_selected"] = table["id"].isin(silent_ids)
     table["src_appeal_responded"] = table["id"].isin(resp_ids)
     table["src_appeal_gift"] = table["id"].isin(appeal_gift_ids)
+    table["appealed_last_year"] = (
+        table["id"].isin(appealed_ids) if appealed_ids is not None else pd.NA
+    )
     table["don_appeal_window"] = table["don_appeal_window"].fillna(0.0)
     table["fst"] = table["fst"].fillna(False) | table.pop("is_fst_new").fillna(False)
     table["needs_review"] = ~table["in_neon"]

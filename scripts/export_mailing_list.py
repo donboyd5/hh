@@ -27,7 +27,7 @@ from hh.clean.donations import clean_donations
 from hh.external import fortsalem as fst
 from hh.external import mailing as ml
 from hh.external.mailing import match_households
-from hh.external.notes import load_boyd_notes
+from hh.external.notes import load_boyd_notes, load_fst_web_notes
 from hh.external.provenance import append_external_manifest, external_source_entry
 
 XLSX_FILENAME = "hh-mailing-list.xlsx"
@@ -66,6 +66,7 @@ def main() -> None:
     accounts = io.read_parquet("processed", "accounts_geocoded.parquet")
     donations = clean_donations(accounts=clean_accounts())
     registrations = io.read_parquet("processed", "registrations_enriched.parquet")
+    appeal_hh = io.read_parquet("processed", "appeal_households.parquet")  # appealed flag
     households = accounts.drop_duplicates(subset=["id"])[["id", "name", "city"]]
 
     donor3 = _matched(ml.load_donor3(), households)
@@ -96,11 +97,14 @@ def main() -> None:
         appeal_responded=appeal_responded,
         fst_summary=fst_summary,
         boyd_notes=load_boyd_notes(),
+        appealed_ids=set(appeal_hh.loc[appeal_hh["appealed"], "id"].astype(str)),
     )
 
     # Fort Salem fuzzy candidates for Don to confirm (review sheet; never auto-merged)
     fst_review = fuzzy_fst_candidates(fst_summary, accounts)
     fst_review.insert(0, "confirm", "")  # Don marks Y / N
+    web_notes = load_fst_web_notes()
+    fst_review["web_note"] = fst_review["fst_name"].map(web_notes)
 
     io.write_parquet(table, "processed", "mailing_list.parquet")
     io.write_parquet(fst_review, "processed", "fst_candidates.parquet")
