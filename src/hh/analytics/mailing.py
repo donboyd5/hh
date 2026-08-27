@@ -181,8 +181,8 @@ def pick_contact(accounts: pd.DataFrame, donations: pd.DataFrame) -> pd.DataFram
     contact["address"] = joined.mask(both_blank, pd.NA)
 
     # salutation: the household-level field wins, the account-level one fills gaps
-    hh_sal = contact.pop("salutation_hh").astype("string") if "salutation_hh" in contact else pd.NA
-    ind_sal = contact.pop("salutation_ind").astype("string") if "salutation_ind" in contact else pd.NA
+    hh_sal = contact.pop("salutation_hh").astype("string")
+    ind_sal = contact.pop("salutation_ind").astype("string")
     contact["salutation"] = hh_sal.fillna(ind_sal)
     return contact
 
@@ -264,79 +264,17 @@ def apply_exclusions(
     return table[~deceased & ~small].reset_index(drop=True), qa
 
 
-_STOP_TOKENS = {"&", "and", "the", "family"}
-
-
-def _name_tokens(name: str) -> tuple[str | None, list[str]]:
-    """(surname, given names) from a person or household label, lowercased.
-
-    "Kyle & Jared West" -> ("west", ["kyle", "jared"]); parenthetical asides are
-    dropped, so "Kathleen King (in memory of Bob Skinner)" keeps surname king.
-    """
-    s = re.sub(r"\(.*?\)", "", str(name)).lower()
-    tokens = [t.strip(",.") for t in s.split() if t.strip(",.")]
-    if len(tokens) < 2:
-        return None, []
-    return tokens[-1], [t for t in tokens[:-1] if t not in _STOP_TOKENS]
-
-
-def _given_compatible(a: str, b: str) -> bool:
-    """Two given names that could be the same person: shared 3-letter start, or one a
-    short form of the other (dan/daniel, rich/richard)."""
-    return a[:3] == b[:3] or a.startswith(b) or b.startswith(a)
-
-
 def fst_candidates(fst_summary: pd.DataFrame, accounts: pd.DataFrame) -> pd.DataFrame:
-    """The unique plausible Neon household per Fort Salem name that lacks an exact match.
+    """The single strong Neon candidate per non-exact Fort Salem name, for the main sheet.
 
-    Fort Salem's lists use casual names, so an exact match is not the whole story:
-    partner-order flips ("Kyle & Jared West" vs "Jared and Kyle West"), nicknames
-    ("Richard Butler" vs "Rich Butler"), and compound names ("Amy Wise Foster") hide
-    real matches. A name gets a candidate only when exactly one Neon household shares
-    its surname and has a compatible given name among the household label or any member
-    account name — ambiguous or absent matches are left blank for the keep/drop review,
-    never guessed (about 46 candidates in the 2026-08 data; ~302 names have none).
-
-    Returns ``[name, fst_candidate_id, fst_candidate_name]`` for candidate rows only.
+    Thin wrapper over :mod:`hh.analytics.fst_match`: a name gets ``fst_candidate_*`` only
+    when exactly one household scores at/above ``AUTO_FILL_SCORE``; the full ranked
+    candidate list (including weaker ones) goes to the workbook's review sheet. Never a
+    merge — Don confirms each.
     """
-    # surname -> given name -> rollup household ids, from household labels and every
-    # individual member account name (a member's name may not appear in the label)
-    index: dict[str, dict[str, set[str]]] = {}
-    label_of: dict[str, str] = {}
+    from .fst_match import auto_candidates, fuzzy_fst_candidates
 
-    def add(name: str, hh_id: str) -> None:
-        surname, givens = _name_tokens(name)
-        if not surname:
-            return
-        for given in givens or [()]:
-            index.setdefault(surname, {}).setdefault(given, set()).add(hh_id)
-
-    hh = accounts.drop_duplicates(subset=["id"])
-    for hh_id, label in zip(hh["id"], hh["name"], strict=True):
-        label_of[str(hh_id)] = str(label)
-        add(str(label), str(hh_id))
-    indiv = accounts[accounts.get("contact_type", "").eq("Individual") & accounts["full_name"].notna()]
-    for hh_id, full_name in zip(indiv["id"], indiv["full_name"], strict=True):
-        add(str(full_name), str(hh_id))
-
-    rows = []
-    exact = fst_summary["in_neon"] == True if "in_neon" in fst_summary else None  # noqa: E712
-    for i, name in enumerate(fst_summary["name"]):
-        if exact is not None and bool(exact.iloc[i]):
-            continue  # already matched exactly; no candidate needed
-        surname, givens = _name_tokens(name)
-        if not surname or not givens:
-            continue
-        hits: set[str] = set()
-        for pool_given, hh_ids in index.get(surname, {}).items():
-            if pool_given and any(_given_compatible(g, pool_given) for g in givens):
-                hits |= hh_ids
-        if len(hits) == 1:
-            hh_id = next(iter(hits))
-            rows.append(
-                {"name": name, "fst_candidate_id": hh_id, "fst_candidate_name": label_of[hh_id]}
-            )
-    return pd.DataFrame(rows, columns=["name", "fst_candidate_id", "fst_candidate_name"])
+    return auto_candidates(fuzzy_fst_candidates(fst_summary, accounts))
 
 
 def _new_codes(names: pd.Series) -> pd.Series:

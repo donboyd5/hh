@@ -12,6 +12,7 @@ dependencies = [
     "python-dotenv>=1.0",  # load NEON_ORG_ID / NEON_API_KEY from .env
     "plotly>=6.8.0",
     "openpyxl>=3.1",       # read staff-maintained xlsx workbooks (data/30_external)
+    "rapidfuzz>=3.14.5",
 ]
 
 [dependency-groups]

@@ -20,6 +20,7 @@ from pathlib import Path
 import pandas as pd
 
 from hh import config, io
+from hh.analytics.fst_match import fuzzy_fst_candidates
 from hh.analytics.mailing import build_mailing_list
 from hh.clean.accounts import clean_accounts
 from hh.clean.donations import clean_donations
@@ -97,9 +98,15 @@ def main() -> None:
         boyd_notes=load_boyd_notes(),
     )
 
+    # Fort Salem fuzzy candidates for Don to confirm (review sheet; never auto-merged)
+    fst_review = fuzzy_fst_candidates(fst_summary, accounts)
+    fst_review.insert(0, "confirm", "")  # Don marks Y / N
+
     io.write_parquet(table, "processed", "mailing_list.parquet")
+    io.write_parquet(fst_review, "processed", "fst_candidates.parquet")
     with pd.ExcelWriter(config.layer_dir("processed") / XLSX_FILENAME, engine="openpyxl") as xw:
         table.to_excel(xw, sheet_name="mailing-list", index=False)
+        fst_review.to_excel(xw, sheet_name="fst-candidates", index=False)
         pd.DataFrame(
             {
                 "item": [
@@ -150,6 +157,12 @@ def main() -> None:
     print(
         f"new accounts: {len(new_accounts)} of {len(new_accounts_all)} clear "
         f"${ml.MIN_NEW_ACCOUNT_REGISTRATION:.0f} in lifetime registrations"
+    )
+    strong = int(((fst_review["rank"] == 1) & (fst_review["score"] >= 92)).sum())
+    print(
+        f"fst candidates: {fst_review['fst_name'].nunique()} Fort Salem names have a close "
+        f"Neon candidate ({strong} at score 92+); "
+        f"{int(table['fst_candidate_id'].notna().sum())} auto-filled on the main sheet"
     )
     print(
         f"mailing list: {len(table)} rows "
