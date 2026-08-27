@@ -31,7 +31,7 @@ from hh.external import fortsalem as fst
 from hh.external import mailing as ml
 from hh.external.fst_confirmations import load_confirmations, resolve
 from hh.external.mailing import match_households
-from hh.external.notes import load_boyd_notes, load_fst_web_notes
+from hh.external.notes import load_boyd_notes, load_fst_contact_notes, load_fst_web_notes
 from hh.external.provenance import append_external_manifest, external_source_entry
 
 XLSX_FILENAME = "hh-mailing-list.xlsx"
@@ -94,6 +94,51 @@ def _format_review_sheet(ws, *, n_rows: int) -> None:
         dv.add(f"A2:A{n_rows + 1}")
         for r in range(2, n_rows + 2):
             ws[f"A{r}"].fill = PatternFill("solid", fgColor="FFF2CC")
+
+
+def _fold_fst_contacts(table: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Fill address fields on Fort Salem (needs_review) rows from the research outputs.
+
+    Returns the table and the research sheet (every roll hit plus web notes, so Don can
+    see the runner-up address and the evidence). Deaths confirmed on the web drop the row
+    (printed); a named survivor re-labels the household.
+    """
+    contacts_path = config.layer_dir("interim") / "fst_contacts.parquet"
+    hits = pd.read_parquet(contacts_path) if contacts_path.exists() else pd.DataFrame(
+        columns=["household_name", "given_agreement", "owners", "street", "city", "state",
+                 "zip", "town", "source", "confidence"]
+    )
+    notes = load_fst_contact_notes()
+    attrs = dict(table.attrs)
+
+    dead = set(notes.loc[notes["deceased"], "household_name"])
+    is_dead = table["needs_review"] & table["household_name"].isin(dead)
+    dropped = table.loc[is_dead, "household_name"]
+    for name in dropped:
+        print(f"  dropped (web-confirmed deceased): {name}")
+    table = table[~(table["needs_review"] & table["household_name"].isin(dead))].copy()
+    survivors = dict(zip(notes["household_name"], notes["survivor"], strict=True))
+    relabel = table["needs_review"] & table["household_name"].map(survivors).notna()
+    table.loc[relabel, "household_name"] = table.loc[relabel, "household_name"].map(survivors)
+
+    best = hits.drop_duplicates("household_name").set_index("household_name")
+    fst = table["needs_review"]
+    field_map = [("address", "street"), ("city", "city"), ("state_province", "state"), ("zip_code", "zip")]
+    for col, src in field_map:
+        table.loc[fst, col] = table.loc[fst, "household_name"].map(best[src])
+    table["address_source"] = pd.NA
+    table.loc[fst, "address_source"] = table.loc[fst, "household_name"].map(
+        best["source"] + " (" + best["confidence"] + "; owner: " + best["owners"].astype(str) + ")"
+    )
+    note_map = notes.set_index("household_name")["contact_note"]
+    table["contact_note"] = pd.NA
+    table.loc[fst, "contact_note"] = table.loc[fst, "household_name"].map(note_map)
+    table.attrs.update(attrs)
+
+    research = table.loc[fst, ["household_name", "fst_best_tier", "fst_years_list"]].merge(
+        hits, on="household_name", how="left"
+    ).merge(notes.drop(columns=["deceased", "survivor"]), on="household_name", how="left")
+    return table, research.sort_values(["household_name", "given_agreement"], ascending=[True, False])
 
 
 def main() -> None:
@@ -215,12 +260,18 @@ def main() -> None:
         judy.to_excel(xw, sheet_name="fst-donors-in-neon", index=False)
         _freeze_header(xw.sheets["fst-donors-in-neon"])
 
+    # Fort Salem people not in Neon: addresses from the assessment-roll research
+    # (scripts/research_fst_contacts.py) and web notes; web-confirmed deaths drop
+    table, fst_research = _fold_fst_contacts(table)
+
     io.write_parquet(table, "processed", "mailing_list.parquet")
     io.write_parquet(fst_review, "processed", "fst_candidates.parquet")
     xlsx_path = config.layer_dir("processed") / XLSX_FILENAME
     with pd.ExcelWriter(xlsx_path, engine="openpyxl") as xw:
         table.to_excel(xw, sheet_name="mailing-list", index=False)
         fst_review.to_excel(xw, sheet_name="fst-candidates", index=False)
+        fst_research.to_excel(xw, sheet_name="fst-contact-research", index=False)
+        _freeze_header(xw.sheets["fst-contact-research"])
         fst_dropped = pd.DataFrame(table.attrs.get("fst_dropped", []))
         fst_dropped.to_excel(xw, sheet_name="fst-dropped", index=False)
         _freeze_header(xw.sheets["fst-dropped"])

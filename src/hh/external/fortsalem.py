@@ -58,6 +58,9 @@ _ORG_MARKERS = (
     "theatre", "theater", "church", "school", "pharmacy", "market", "garage", "clinic",
     "energy", "insurance", "wellness", "studio", "inn", "store", "shoppe", "grille",
     "cafe", "café", "lodge", "construction", "services", "enterprises", "productions",
+    # 2026-08-28: businesses and media that slipped through on the real page
+    "network", "laboratory", "chronicle", "journal", "press", "oncology", "hematology",
+    "health", "broker", "corner", "beim", "anonymous",
 )
 _ORG_PATTERN = re.compile(
     r"\b(" + "|".join(_ORG_MARKERS) + r")\b", re.IGNORECASE
@@ -173,9 +176,62 @@ def likely_org(name: str) -> bool:
     return bool(_ORG_PATTERN.search(name))
 
 
+_STOP = {"&", "and", "the", "family", "mr", "mrs", "ms", "dr"}
+
+
+def _canonical_key(name: str) -> tuple[str, frozenset[str]] | None:
+    """(surname, canonical given names) — nicknames folded (Bob -> robert), asides
+    ("(in memory of ...)") dropped — or None when no given name can be found."""
+    from ..analytics.fst_match import _ALIAS
+
+    s = re.sub(r"\(.*?\)", "", name).lower()
+    toks = [t.strip(",.'’s") for t in s.replace("&", " & ").split() if t.strip(",.'’s")]
+    while toks and toks[-1] in _STOP:  # "The Graves Family" -> surname graves, no givens
+        toks.pop()
+    if len(toks) < 2:
+        return None
+    givens = {_ALIAS.get(t, t) for t in toks[:-1] if t not in _STOP and len(t) > 1}
+    return (toks[-1], frozenset(givens)) if givens else None
+
+
+def canonical_name_map(names: list[str]) -> dict[str, str]:
+    """Map each listed name to the fullest variant of the same household.
+
+    Fort Salem's page lists the same people several ways across years — "Bob & Donna-Lynn
+    Greene", "Bob and Donna-Lynn Greene", "Robert & Donna-Lynn Greene"; "Liz Skinner",
+    "Elizabeth Skinner", "Liz & Bob Skinner". Names with the same surname whose given
+    names (nickname-folded) are equal, or one a subset of the other, are one household;
+    the variant naming the most people wins. Names without a parseable given name
+    ("Tom", "The Tanakas") map to themselves and are dropped by the caller.
+    """
+    keyed = {n: _canonical_key(n) for n in names}
+    by_surname: dict[str, list[str]] = {}
+    for n, k in keyed.items():
+        if k:
+            by_surname.setdefault(k[0], []).append(n)
+    out: dict[str, str] = {}
+    for members in by_surname.values():
+        members = sorted(members, key=lambda n: (-len(keyed[n][1]), n))  # fullest first
+        for i, n in enumerate(members):
+            givens = keyed[n][1]
+            fuller = next((m for m in members[:i] if givens <= keyed[m][1]), None)
+            out[n] = out[fuller] if fuller is not None else n
+    return out
+
+
 def summarize_sponsors(sponsors: pd.DataFrame) -> pd.DataFrame:
-    """Collapse year rows to one row per listed name with span, years, and best tier."""
-    return (
+    """Collapse year rows to one row per household with span, years, and best tier.
+
+    Name variants of one household (see :func:`canonical_name_map`) merge into the
+    fullest listed name; names with no parseable given name are dropped (they cannot be
+    matched or mailed) and reported via ``sponsors.attrs["dropped_fragments"]``.
+    """
+    canon = canonical_name_map(sorted(set(sponsors["name"])))
+    fragments = sorted(n for n in set(sponsors["name"]) if _canonical_key(n) is None
+                       and not is_anonymous(n) and not likely_org(n))
+    sponsors = sponsors[~sponsors["name"].isin(fragments)]
+    sponsors = sponsors.assign(name=sponsors["name"].map(lambda n: canon.get(n, n)))
+    summary = (
         sponsors.assign(
             anonymous=sponsors["name"].map(is_anonymous),
             org=sponsors["name"].map(likely_org),
@@ -196,6 +252,8 @@ def summarize_sponsors(sponsors: pd.DataFrame) -> pd.DataFrame:
         .sort_values(["n_years", "name"], ascending=[False, True])
         .reset_index(drop=True)
     )
+    summary.attrs["dropped_fragments"] = fragments
+    return summary
 
 
 def load_fst_sponsors(*, force: bool = False) -> pd.DataFrame:

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pandas as pd
 import yaml
 
 from .. import config
@@ -56,3 +57,30 @@ def load_fst_web_notes(path: Path | None = None) -> dict[str, str]:
         for k, v in (loaded.get("notes") or {}).items()
         if isinstance(v, dict) and v.get("note")
     }
+
+
+FST_CONTACT_NOTES_FILENAME = "fst-contact-notes.yaml"
+
+
+def load_fst_contact_notes(path: Path | None = None) -> pd.DataFrame:
+    """Web-research contact notes on Fort Salem sponsors not in Neon, one row per name:
+    ``[household_name, contact_note, contact_confidence, contact_address, deceased,
+    survivor]``. Hand/AI-maintained under ``data/30_external`` (local only)."""
+    src = Path(path) if path is not None else config.layer_dir("external") / FST_CONTACT_NOTES_FILENAME
+    cols = ["household_name", "contact_note", "contact_confidence", "contact_address", "deceased", "survivor"]
+    if not src.exists():
+        return pd.DataFrame(columns=cols)
+    loaded = yaml.safe_load(src.read_text()) or {}
+    rows = [
+        {
+            "household_name": str(k),
+            "contact_note": v.get("finding"),
+            "contact_confidence": v.get("confidence"),
+            "contact_address": v.get("address"),
+            "deceased": bool(v.get("deceased", False)),
+            "survivor": v.get("survivor"),
+        }
+        for k, v in (loaded.get("notes") or {}).items()
+        if isinstance(v, dict)
+    ]
+    return pd.DataFrame(rows, columns=cols)
