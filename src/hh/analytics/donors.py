@@ -12,10 +12,10 @@ JUNK_ACCOUNT_IDS = ("36805",)
 
 
 def succeeded_individual_gifts(donations: pd.DataFrame) -> pd.DataFrame:
-    """SUCCEEDED DONATION/PLEDBGEPAYMENT gifts from individual accounts."""
+    """SUCCEEDED DONATION/PLEDGEPAYMENT gifts from individual accounts."""
     return donations[
         donations["donation_status"].astype(str).eq("SUCCEEDED")
-        & donations["donation_type"].isin(["DONATION", "PLEDBGEPAYMENT"])
+        & donations["donation_type"].isin(["DONATION", "PLEDGEPAYMENT"])
         & donations["account_type"].astype(str).eq("Individual")
     ].copy()
 

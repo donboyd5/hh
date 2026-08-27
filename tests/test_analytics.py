@@ -240,11 +240,11 @@ def _gifts(extra=None):
             ),
         }
     )
-    return base
+    return pd.concat([base, extra], ignore_index=True) if extra is not None else base
 
 
 def test_size_tier_boundaries():
-    from hh.analytics.donors import size_tier, TIER_LABELS
+    from hh.analytics.donors import TIER_LABELS, size_tier
 
     assert size_tier(0) == "<$100"
     assert size_tier(99.99) == "<$100"
@@ -270,8 +270,36 @@ def test_annual_gifts_and_reconciliation():
     assert ag["donation_amount"].sum() == succeeded_individual_gifts(raw)["donation_amount"].sum()
 
 
+def test_succeeded_gifts_keep_pledge_payments():
+    """Regression: the filter literal once read PLEDG+B+GEPAYMENT (a phantom B), which
+    silently dropped every pledge *payment* from donor analytics while still passing
+    eq-style eyeballing. The fixture value is built by concatenation so a re-corrupted
+    literal in either place fails this test instead of quietly matching itself."""
+    from hh.analytics.donors import succeeded_individual_gifts
+
+    pledge_payment = "PLEDGE" + "PAYMENT"  # Neon's actual donation_type value
+    raw = _gifts(
+        pd.DataFrame(
+            {
+                "donation_id": ["p1", "p2", "p3"],
+                "id": ["H1", "H1", "H2"],
+                "account_id": ["A1", "A1", "A2"],
+                "account_type": ["Individual"] * 3,
+                "donation_type": [pledge_payment, "PLEDGE", pledge_payment],
+                "donation_status": ["SUCCEEDED"] * 3,
+                "donation_amount": [2000.0, None, 100.0],
+                "donation_date": pd.to_datetime(["2024-10-23", "2024-10-21", "2025-01-15"]),
+            }
+        )
+    )
+    out = succeeded_individual_gifts(raw)
+    assert (out["donation_type"] == pledge_payment).sum() == 2  # payments survive
+    assert (out["donation_type"] == "PLEDGE").sum() == 0  # pledge commitments never do
+    assert out["donation_amount"].sum() == 50.0 + 1200.0 + 30.0 + 30.0 + 6000.0 + 2100.0
+
+
 def test_donors_by_size_year():
-    from hh.analytics.donors import annual_gifts, donors_by_size_year, TIER_LABELS
+    from hh.analytics.donors import TIER_LABELS, annual_gifts, donors_by_size_year
 
     out = donors_by_size_year(annual_gifts(_gifts()))
     # H1: 2023=$50 (<$100), 2024=$1200 ($1,000–4,999); H2: 2023=$30, 2024=$30 (both <$100);

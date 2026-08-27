@@ -42,7 +42,7 @@ Two further local-only files (both under gitignored `data/`, never committed):
 - **Appealed** — the household maps (through any member account, or the
   workbook's household id when the account was deleted) to a kept row of the
   appeal workbook: 1,039 households.
-- **Responded** — at least one SUCCEEDED `DONATION`/`PLEDBGEPAYMENT` gift to
+- **Responded** — at least one SUCCEEDED `DONATION`/`PLEDGEPAYMENT` gift to
   campaign *Annual Fund Drive - 2025-2026* dated 2025-10-01 through
   2026-01-31, on **any account in the household** (the mailing went to one
   member; the gift often arrives on another's account — 21 of the 114

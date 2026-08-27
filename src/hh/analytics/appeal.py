@@ -7,7 +7,7 @@ use event ``starts_on``, not ``registered_at``, so registering in September for 
 does not count as prior engagement, and ``households_summary`` (all-time counts) cannot be
 substituted.
 
-Response definition (confirmed with Don): a SUCCEEDED DONATION/PLEDBGEPAYMENT gift to campaign
+Response definition (confirmed with Don): a SUCCEEDED DONATION/PLEDGEPAYMENT gift to campaign
 ``Annual Fund Drive - 2025-2026`` dated 2025-10-01 through 2026-01-31, rolled up to the
 household — the rollup matters: ~18% of responding households gave only through a household
 member's account.
@@ -45,7 +45,7 @@ def campaign_gifts(
     return donations[
         donations["campaign"].eq(campaign)
         & donations["donation_status"].eq("SUCCEEDED")
-        & donations["donation_type"].isin(["DONATION", "PLEDBGEPAYMENT"])
+        & donations["donation_type"].isin(["DONATION", "PLEDGEPAYMENT"])
         & donations["donation_date"].between(start, end)
     ].copy()
 
