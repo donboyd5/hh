@@ -221,6 +221,9 @@ def main() -> None:
     with pd.ExcelWriter(xlsx_path, engine="openpyxl") as xw:
         table.to_excel(xw, sheet_name="mailing-list", index=False)
         fst_review.to_excel(xw, sheet_name="fst-candidates", index=False)
+        fst_dropped = pd.DataFrame(table.attrs.get("fst_dropped", []))
+        fst_dropped.to_excel(xw, sheet_name="fst-dropped", index=False)
+        _freeze_header(xw.sheets["fst-dropped"])
         _format_review_sheet(xw.sheets["fst-candidates"], n_rows=len(fst_review))
         _freeze_header(xw.sheets["mailing-list"])
         pd.DataFrame(
@@ -287,6 +290,10 @@ def main() -> None:
     )
     for name in conflicts:
         print(f"  CONFLICT (held, not folded): {name} confirmed against two different households")
+    print(
+        f"fst rule B: {int(table['needs_review'].sum())} Fort Salem sponsors kept, "
+        f"{len(table.attrs.get('fst_dropped', []))} dropped -> fst-dropped sheet"
+    )
     print(
         f"mailing list: {len(table)} rows "
         f"({int(table['in_neon'].sum())} in Neon, {int(table['needs_review'].sum())} FST new)"

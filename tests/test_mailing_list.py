@@ -9,6 +9,7 @@ from hh.analytics.mailing import (
     engagement_spend,
     fiscal_year,
     fst_candidates,
+    fst_keep_mask,
     gifts_by_fy,
     pick_contact,
     predominant_engagement,
@@ -244,7 +245,7 @@ def _externals():
             "name": ["Carol Dane", "Zed Sponsor"],
             "n_years": [2, 1],
             "years": ["2024,2025", "2025"],
-            "best_tier": ["gold", "friends of fort salem"],
+            "best_tier": ["gold", "inner circle"],  # Zed: $100+ tier -> kept by rule B
             "anonymous": [False, False],
             "org": [False, False],
             "id": ["H2", pd.NA],
@@ -304,7 +305,20 @@ def test_build_mailing_list_end_to_end():
     zed = table.loc["Zed Sponsor"]
     assert zed["new_code"] == "new1" and zed["needs_review"] and zed["fst"]
     assert zed["never_donated"] and zed["predominant_engagement"] == "none"
-    assert zed["fst_best_tier"] == "friends of fort salem"
+    assert zed["fst_best_tier"] == "inner circle"
 
     # one row per household, sorted by name
     assert table.index.is_unique
+
+
+def test_fst_keep_mask_rule_b():
+    fst = pd.DataFrame(
+        {
+            "name": ["Friend Once", "Friend Twice", "Inner Once", "Angel 2020", "Angel Back", "Gold"],
+            "best_tier": ["friends of fort salem", "friends of fort salem", "inner circle",
+                          "opening angels", "opening angels", "gold"],
+            "n_years": [1, 2, 1, 1, 2, 1],
+            "years": ["2024", "2023,2025", "2022", "2020", "2020,2023", "2021"],
+        }
+    )
+    assert fst_keep_mask(fst).tolist() == [False, True, True, False, True, True]

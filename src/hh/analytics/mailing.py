@@ -55,6 +55,18 @@ MIN_APPEAL_GIFT = 10.0
 # parents-of-class-kids pool — families spending $500-$4,000 on classes with zero gifts.
 MIN_ENGAGED_NONDONOR_SPEND = 500.0
 
+# Fort Salem sponsors NOT in Neon are kept only if serious (rule B, Don 2026-08-28):
+# a $100+ tier (Inner Circle or higher) in any year 2021-2025, or sponsorship in two or
+# more years at any level. 2020-only "Opening Angels" (a one-time reopening gesture,
+# amount unpublished) are dropped unless they reappeared later. Dropped names are
+# reported, not deleted, so one can be pulled back by hand.
+FST_TIER_RANK = {
+    "founding": 7, "opening angels": 6, "platinum": 6, "gold": 5, "silver": 4,
+    "bronze": 3, "inner circle": 2, "friends of fort salem": 1,
+}
+FST_KEEP_MIN_RANK = 2  # inner circle ($100-499) and up
+FST_KEEP_MIN_YEARS = 2
+
 # a note that says someone died — unless it also says someone survives (e.g. Don's
 # "Tim has died; wife/gf still around; Sue will contact" keeps the household: mail
 # goes to the survivor). Only explicit survivor phrases guard: "husband died 2024"
@@ -309,6 +321,17 @@ def fst_candidates(fst_summary: pd.DataFrame, accounts: pd.DataFrame) -> pd.Data
     return auto_candidates(fuzzy_fst_candidates(fst_summary, accounts))
 
 
+def fst_keep_mask(fst_summary: pd.DataFrame) -> pd.Series:
+    """Rule B: which Fort Salem sponsors are serious enough to keep (see constants)."""
+    tier = fst_summary["best_tier"].astype(str).str.strip().str.lower()
+    rank = tier.map(FST_TIER_RANK).fillna(0)
+    years = fst_summary["years"].astype(str).str.split(",")
+    last_year = years.map(lambda l: max((int(y) for y in l if y.strip().isdigit()), default=0))
+    n_years = pd.to_numeric(fst_summary["n_years"], errors="coerce").fillna(0)
+    angels_2020_only = tier.eq("opening angels") & last_year.eq(2020)
+    return ((rank >= FST_KEEP_MIN_RANK) & ~angels_2020_only) | (n_years >= FST_KEEP_MIN_YEARS)
+
+
 def _new_codes(names: pd.Series) -> pd.Series:
     """``new1``, ``new2``, … assigned in name order (stable across reruns)."""
     order = sorted(range(len(names)), key=lambda i: str(names.iloc[i]))
@@ -383,7 +406,10 @@ def build_mailing_list(
     # -- Fort Salem split (robust to a nullable/float in_neon flag) -------------------
     in_neon_flag = fst_summary["in_neon"].fillna(False).astype(bool)
     fst_neon = fst_summary[in_neon_flag]
-    fst_new = fst_summary[~in_neon_flag].copy()
+    fst_not_neon = fst_summary[~in_neon_flag]
+    keep = fst_keep_mask(fst_not_neon)
+    fst_dropped = fst_not_neon[~keep][["name", "best_tier", "n_years", "years"]].reset_index(drop=True)
+    fst_new = fst_not_neon[keep].copy()
     fst_new = fst_new.rename(
         columns={
             "name": "fst_name",
@@ -517,4 +543,5 @@ def build_mailing_list(
     # account ids read as what they are (internal callers still use id / neon_ids)
     out = table.rename(columns={"id": "neon_hh_id", "neon_ids": "neon_account_ids"})
     out.attrs["exclusion_qa"] = exclusion_qa
+    out.attrs["fst_dropped"] = fst_dropped.to_dict(orient="records")  # JSON-safe for parquet
     return out[OUTPUT_COLUMNS]
