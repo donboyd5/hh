@@ -1,0 +1,218 @@
+"""Mailing-list assembly (synthetic frames; the real list is local-only PII)."""
+import pandas as pd
+
+from hh.analytics.mailing import (
+    OUTPUT_COLUMNS,
+    _new_codes,
+    build_mailing_list,
+    engagement_spend,
+    fiscal_year,
+    gifts_by_fy,
+    pick_contact,
+    predominant_engagement,
+)
+
+PLEDGE_PAYMENT = "PLEDGE" + "PAYMENT"  # built by concatenation (see test_analytics)
+
+
+def _accounts():
+    return pd.DataFrame(
+        {
+            "account_id": ["A1", "A2", "B1", "C1"],
+            "id": ["H1", "H1", "H2", "H3"],
+            "name": ["Ann & Bob Smith", "Ann & Bob Smith", "Carol Dane", "New Person"],
+            "first_name": ["Ann", "Bob", "Carol", "New"],
+            "last_name": ["Smith", "Smith", "Dane", "Person"],
+            "household_salutation": ["Ann and Bob", None, "Carol", None],
+            "household_name": ["Ann & Bob Smith", "Ann & Bob Smith", "Carol Dane", "New Person"],
+            "full_name": [None, None, None, "New Person"],
+            "company_name": [None, None, None, None],
+            "account_type": ["Individual"] * 4,
+            "contact_type": ["Individual"] * 4,
+            "deceased": [False, False, False, True],
+            "do_not_contact": [False, False, True, False],
+            "address_line1": ["1 Main St", None, "2 Elm St", None],
+            "address_line2": [None, None, "Apt 2", None],
+            "city": ["Cambridge", None, "Salem", None],
+            "state_province": ["NY", None, "NY", None],
+            "zip_code": ["12816", None, "12865", None],
+            "phone_1": ["518-555-0100", None, None, None],
+            "email_1": [None, "bob@x.org", None, None],
+            "household_salutation_": pd.NA,
+            "account_created_at": ["2020-01-01", "2019-01-01", "2024-08-01", "2025-10-01"],
+            "account_note_text": [None, None, "longtime volunteer", None],
+            "distance_miles": [0.5, 0.5, 8.0, None],
+        }
+    )
+
+
+def _donations():
+    return pd.DataFrame(
+        {
+            "donation_id": ["d1", "d2", "d3", "d4", "d5", "d6"],
+            "id": ["H1", "H1", "H2", "H3", "H1", "H2"],
+            "account_id": ["A1", "A1", "B1", "C1", "A2", "B1"],
+            "account_type": ["Individual"] * 6,
+            "donation_type": [
+                "DONATION", PLEDGE_PAYMENT, "DONATION", "DONATION", "DONATION", "DONATION",
+            ],
+            "donation_status": ["SUCCEEDED"] * 6,
+            "donation_amount": [5.0, 10.0, 500.0, 7.0, 2022.5, 3.0],
+            # FY labels: 2024-06-30 -> FY24; 2024-07-01 -> FY25; 2020 -> FY21 (outside window)
+            "donation_date": pd.to_datetime(
+                ["2024-06-30", "2024-10-23", "2025-11-01", "2020-05-01", "2023-01-15", "2021-08-02"]
+            ),
+        }
+    )
+
+
+def _registrations():
+    return pd.DataFrame(
+        {
+            "registration_id": ["r1", "r2", "r3", "r4"],
+            "household_id": ["H1", "H1", "H2", "H3"],
+            "starts_on": pd.to_datetime(["2025-01-15", "2025-02-01", "2024-09-01", "2015-01-01"]),
+            "event_majorcat": ["performance", "class", "other", "performance"],
+            "amount": [40.0, 120.0, 75.0, 30.0],
+        }
+    )
+
+
+def test_fiscal_year_july_boundary():
+    fy = fiscal_year(pd.to_datetime(["2024-06-30", "2024-07-01", "2024-12-31"]))
+    assert fy.tolist() == [2024, 2025, 2025]
+
+
+def test_gifts_by_fy_sums_and_fills_zero_years():
+    out = gifts_by_fy(_donations(), (2022, 2023, 2024, 2025, 2026)).set_index("id")
+    assert out.loc["H1", "don_fy2023"] == 2022.5
+    assert out.loc["H1", "don_fy2024"] == 5.0
+    assert out.loc["H1", "don_fy2025"] == 10.0  # pledge payment counts (regression)
+    assert out.loc["H2", "don_fy2026"] == 500.0
+    # H3's only gift predates the window, so it has no row here at all — build_mailing_list
+    # re-adds listed households from the union of source ids (see the end-to-end test)
+    assert "H3" not in out.index
+
+
+def test_engagement_spend_groups_and_window():
+    out = engagement_spend(_registrations(), (2024, 2025, 2026)).set_index("id")
+    assert out.loc["H1", "arts_spend_3fy"] == 40.0
+    assert out.loc["H1", "classes_spend_3fy"] == 120.0
+    assert out.loc["H2", "arts_spend_3fy"] == 75.0  # 'other' (gala) is arts
+    assert "H3" not in out.index  # 2015 registration outside the window
+    assert out.loc["H1", "regs_3fy"] == 2
+
+
+def test_predominant_engagement_labels():
+    row = pd.Series({"arts_spend_3fy": 10.0, "classes_spend_3fy": 0.0})
+    def spend(arts, classes):
+        return pd.Series({"arts_spend_3fy": arts, "classes_spend_3fy": classes})
+
+    assert predominant_engagement(row) == "arts"
+    assert predominant_engagement(spend(0.0, 5.0)) == "classes"
+    assert predominant_engagement(spend(1.0, 1.0)) == "both"
+    assert predominant_engagement(spend(0.0, 0.0)) == "none"
+
+
+def test_pick_contact_most_gifts_then_fallback():
+    out = pick_contact(_accounts(), _donations()).set_index("id")
+    # A1 has two gifts (d1 and the pledge payment d2) vs A2's one -> A1 (Ann) is the
+    # contact; her missing email falls back to Bob's, other fields are her own
+    row = out.loc["H1"]
+    assert row["contact_account_id"] == "A1"
+    assert row["contact_first_name"] == "Ann"
+    assert row["salutation"] == "Ann and Bob"
+    assert row["address"] == "1 Main St"
+    assert row["email"] == "bob@x.org"  # contact's blank falls back across members
+    assert bool(row["do_not_contact"]) is False  # ANY across members: H2's B1 is DNC
+    assert bool(out.loc["H2", "do_not_contact"]) is True
+    assert bool(out.loc["H3", "deceased"]) is True
+    # address lines concatenate
+    assert out.loc["H2", "address"] == "2 Elm St Apt 2"
+    assert out.loc["H2", "note_neon"] == "longtime volunteer"
+
+
+def test_new_codes_in_name_order():
+    codes = _new_codes(pd.Series(["Zed", "Able", "Mid"]))
+    assert codes.tolist() == ["new3", "new1", "new2"]  # Able, Mid, Zed order
+
+
+def _externals():
+    donor3 = pd.DataFrame(
+        {
+            "household_name": ["Carol Dane"],
+            "steward": ["don"],
+            "steward_raw": ["Don - know a little"],
+            "note_hand": ["friend"],
+            "id": ["H2"],
+        }
+    )
+    new_accounts = pd.DataFrame(
+        {"household_name": ["New Person"], "note_hand": ["came to gala"], "id": ["H3"]}
+    )
+    silent = pd.DataFrame(
+        {"household_name": ["Carol Dane"], "note_hand": ["letter"], "id": ["H2"]}
+    )
+    responded = pd.DataFrame(
+        {"household_name": ["Ann & Bob Smith"], "note_hand": [None], "id": ["H1"]}
+    )
+    fst = pd.DataFrame(
+        {
+            "name": ["Carol Dane", "Zed Sponsor"],
+            "n_years": [2, 1],
+            "years": ["2024,2025", "2025"],
+            "best_tier": ["gold", "friends of fort salem"],
+            "anonymous": [False, False],
+            "org": [False, False],
+            "id": ["H2", pd.NA],
+            "in_neon": [True, False],
+        }
+    )
+    return donor3, new_accounts, silent, responded, fst
+
+
+def test_build_mailing_list_end_to_end():
+    donor3, new_accounts, silent, responded, fst = _externals()
+    table = build_mailing_list(
+        _accounts(),
+        _donations(),
+        _registrations(),
+        donor3=donor3,
+        new_accounts=new_accounts,
+        silent_selected=silent,
+        appeal_responded=responded,
+        fst_summary=fst,
+    ).set_index("household_name")
+
+    assert set(table.columns) == set(OUTPUT_COLUMNS) - {"household_name"}
+
+    # H1: qualifies via the 5-year donor rule AND the appeal-responder list
+    h1 = table.loc["Ann & Bob Smith"]
+    assert h1["src_appeal_responded"]
+    assert h1["src_donor_5yr"]  # 5yr total $2,037.50 >= $10
+    assert h1["don_lifetime"] == 5.0 + 10.0 + 2022.5  # H1's own lifetime gifts only
+    assert h1["predominant_engagement"] == "both"
+    assert h1["neon_ids"] == "A1,A2"
+
+    # H2: donor3 steward/notes + silent note merged; fst flag set via Neon match
+    h2 = table.loc["Carol Dane"]
+    assert h2["steward"] == "don" and h2["steward_detail"] == "Don - know a little"
+    assert h2["note_donor3"] == "friend" and h2["note_silent"] == "letter"
+    assert h2["fst"] and not h2["needs_review"]
+    assert h2["fst_years"] == 2 and h2["fst_best_tier"] == "gold"
+    assert h2["gave_fy26"] and not h2["gave_fy25"]
+
+    # H3: lapsed donor (gave FY21 only) + new-account flag; never in 5yr window
+    h3 = table.loc["New Person"]
+    assert h3["no_gift_last_5yrs"] and not h3["never_donated"]
+    assert h3["src_new_accounts"] and h3["note_new"] == "came to gala"
+    assert h3["deceased"]
+
+    # Zed Sponsor: Fort Salem only, not in Neon -> new code, needs review, zeros
+    zed = table.loc["Zed Sponsor"]
+    assert zed["new_code"] == "new1" and zed["needs_review"] and zed["fst"]
+    assert zed["never_donated"] and zed["predominant_engagement"] == "none"
+    assert zed["fst_best_tier"] == "friends of fort salem"
+
+    # one row per household, sorted by name
+    assert table.index.is_unique
