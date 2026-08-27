@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 from openpyxl.styles import Font, PatternFill
 from openpyxl.worksheet.datavalidation import DataValidation
@@ -28,11 +29,13 @@ from hh.clean.accounts import clean_accounts
 from hh.clean.donations import clean_donations
 from hh.external import fortsalem as fst
 from hh.external import mailing as ml
+from hh.external.fst_confirmations import load_confirmations, resolve
 from hh.external.mailing import match_households
 from hh.external.notes import load_boyd_notes, load_fst_web_notes
 from hh.external.provenance import append_external_manifest, external_source_entry
 
 XLSX_FILENAME = "hh-mailing-list.xlsx"
+JUDY_FILENAME = "fst-donors-in-neon.xlsx"
 
 # Hand-maintained aliases for workbook names that no longer match Neon exactly (Neon
 # household names get edited between pulls; the workbooks age). Keyed by the workbook's
@@ -62,6 +65,11 @@ def _matched(frame: pd.DataFrame, households: pd.DataFrame) -> pd.DataFrame:
     return frame.assign(id=ids, match=how)
 
 
+def _union_years(values) -> str:
+    """Sorted union of comma-separated year lists ("2021,2024" + "2024,2025")."""
+    return ",".join(sorted({y for v in values for y in str(v).split(",") if y}))
+
+
 def _freeze_header(ws) -> None:
     ws.freeze_panes = "A2"
     for cell in ws[1]:
@@ -72,9 +80,12 @@ def _format_review_sheet(ws, *, n_rows: int) -> None:
     """Make the review sheet obvious to mark: wide bold CONFIRM column with a Y/N
     dropdown, frozen header, readable widths on the name columns."""
     _freeze_header(ws)
-    widths = {"A": 16, "B": 34, "C": 20, "D": 18, "I": 30, "K": 34, "L": 16, "M": 60}
-    for col, width in widths.items():
-        ws.column_dimensions[col].width = width
+    widths = {"confirm": 10, "boyd_note": 30, "status": 22, "fst_name": 34,
+              "fst_best_tier": 20, "matched_via": 30, "neon_household": 34,
+              "neon_city": 16, "web_note": 60}
+    for cell in ws[1]:
+        if cell.value in widths:
+            ws.column_dimensions[cell.column_letter].width = widths[cell.value]
     ws["A1"].fill = PatternFill("solid", fgColor="FFF2CC")
     if n_rows:
         dv = DataValidation(type="list", formula1='"Y,N"', allow_blank=True)
@@ -110,7 +121,22 @@ def main() -> None:
     fst_summary = fst_summary.assign(
         id=fst_match["id"].values,
         in_neon=fst_match["match"].isin(["name+city", "name"]),
+        match_type=fst_match["match"].map({"name+city": "exact", "name": "exact"}),
     )
+
+    # Don's confirmed fuzzy matches fold into their Neon households (fst-confirmations.yaml)
+    decisions = load_confirmations()
+    confirmed, duplicates, conflicts = resolve(decisions, households)
+    folded = fst_summary["name"].isin(confirmed) & ~fst_summary["in_neon"]
+    fst_summary.loc[folded, "id"] = fst_summary.loc[folded, "name"].map(confirmed)
+    fst_summary.loc[folded, "in_neon"] = True
+    fst_summary.loc[folded, "match_type"] = "confirmed"
+    boyd_notes = load_boyd_notes()
+    for r in decisions[(decisions["confirm"] == "Y") & decisions["boyd_note"].notna()].itertuples():
+        hh_id = confirmed.get(r.fst_name)
+        if hh_id and r.boyd_note:
+            prior = boyd_notes.get(hh_id)
+            boyd_notes[hh_id] = f"{prior}; {r.boyd_note}" if prior else str(r.boyd_note)
 
     table = build_mailing_list(
         accounts,
@@ -121,24 +147,80 @@ def main() -> None:
         silent_selected=silent_selected,
         appeal_responded=appeal_responded,
         fst_summary=fst_summary,
-        boyd_notes=load_boyd_notes(),
+        boyd_notes=boyd_notes,
         appealed_ids=set(appeal_hh.loc[appeal_hh["appealed"], "id"].astype(str)),
     )
 
     # Fort Salem fuzzy candidates for Don to confirm (review sheet; never auto-merged)
-    fst_review = fuzzy_fst_candidates(fst_summary, accounts)
-    fst_review.insert(0, "confirm", "")  # Don marks Y / N
-    web_notes = load_fst_web_notes()
-    fst_review["web_note"] = fst_review["fst_name"].map(web_notes)
+    # review sheet: candidates for names still unmatched, plus every decided pair (so
+    # Don sees his marks pre-filled and can change them; harvest picks changes up)
+    pending = fst_summary[fst_summary["match_type"].ne("confirmed")]
+    fst_review = fuzzy_fst_candidates(pending, accounts)
+    decided_pairs = decisions.rename(columns={"confirm": "confirm", "boyd_note": "boyd_note"})
+    fst_review = fst_review.merge(
+        decided_pairs[["fst_name", "neon_hh_id", "confirm", "boyd_note"]],
+        on=["fst_name", "neon_hh_id"], how="outer",
+    )
+    fst_review["status"] = np.select(
+        [fst_review["fst_name"].isin(conflicts), fst_review["confirm"].eq("Y"),
+         fst_review["confirm"].eq("N")],
+        ["CONFLICT - two different households confirmed", "confirmed", "rejected"],
+        default="undecided",
+    )
+    fst_review["web_note"] = fst_review["fst_name"].map(load_fst_web_notes())
+    fst_review = fst_review.sort_values(["fst_name", "rank"], na_position="last")
+    fst_review = fst_review[
+        ["confirm", "boyd_note", "status", "fst_name", "fst_best_tier", "fst_years", "rank",
+         "score", "surname_ratio", "given_agreement", "matched_via", "neon_hh_id",
+         "neon_household", "neon_city", "web_note"]
+    ].reset_index(drop=True)
+
+    # Fort Salem donors who ARE in Neon (exact or confirmed): the record for Judy to add
+    # a Neon field from. One row per Neon household; duplicate person records listed.
+    in_neon = fst_summary[fst_summary["in_neon"]].copy()
+    judy = (
+        in_neon.groupby("id")
+        .agg(
+            fst_names=("name", lambda s: "; ".join(sorted(set(s)))),
+            fst_best_tier=("best_tier", "first"),
+            fst_years=("years", _union_years),
+            match_type=("match_type", "first"),
+        )
+        .reset_index()
+        .rename(columns={"id": "neon_hh_id"})
+    )
+    judy = judy.merge(
+        table[["neon_hh_id", "neon_account_ids", "household_name", "city"]], on="neon_hh_id", how="left"
+    )
+    missing_hh = judy["household_name"].isna()  # households not in the mailing list
+    judy.loc[missing_hh, "household_name"] = judy.loc[missing_hh, "neon_hh_id"].map(
+        dict(zip(households["id"].astype(str), households["name"], strict=True))
+    )
+    judy.loc[missing_hh, "neon_account_ids"] = judy.loc[missing_hh, "neon_hh_id"].map(
+        accounts.groupby("id")["account_id"].agg(lambda s: ",".join(sorted(s.astype(str))))
+    )
+    judy["duplicate_neon_ids"] = judy["neon_hh_id"].map(
+        {k: ",".join(v) for k, v in duplicates.items()}
+    )
+    judy["in_mailing_list"] = ~missing_hh
+    judy["neon_field_value"] = "FST donor " + judy["fst_years"]
+    judy["boyd_note"] = judy["neon_hh_id"].map(boyd_notes)  # incl. notes from the review sheet
+    judy = judy[
+        ["neon_hh_id", "neon_account_ids", "duplicate_neon_ids", "household_name", "city",
+         "fst_names", "fst_best_tier", "fst_years", "match_type", "in_mailing_list",
+         "neon_field_value", "boyd_note"]
+    ].sort_values("household_name").reset_index(drop=True)
+    io.write_parquet(judy, "processed", "fst_donors_in_neon.parquet")
+    with pd.ExcelWriter(config.layer_dir("processed") / JUDY_FILENAME, engine="openpyxl") as xw:
+        judy.to_excel(xw, sheet_name="fst-donors-in-neon", index=False)
+        _freeze_header(xw.sheets["fst-donors-in-neon"])
 
     io.write_parquet(table, "processed", "mailing_list.parquet")
     io.write_parquet(fst_review, "processed", "fst_candidates.parquet")
     xlsx_path = config.layer_dir("processed") / XLSX_FILENAME
     with pd.ExcelWriter(xlsx_path, engine="openpyxl") as xw:
         table.to_excel(xw, sheet_name="mailing-list", index=False)
-        fst_review.rename(columns={"confirm": "CONFIRM (Y/N)"}).to_excel(
-            xw, sheet_name="fst-candidates", index=False
-        )
+        fst_review.to_excel(xw, sheet_name="fst-candidates", index=False)
         _format_review_sheet(xw.sheets["fst-candidates"], n_rows=len(fst_review))
         _freeze_header(xw.sheets["mailing-list"])
         pd.DataFrame(
@@ -194,12 +276,15 @@ def main() -> None:
         f"new accounts: {len(new_accounts)} of {len(new_accounts_all)} clear "
         f"${ml.MIN_NEW_ACCOUNT_REGISTRATION:.0f} in lifetime registrations"
     )
-    strong = int(((fst_review["rank"] == 1) & (fst_review["score"] >= 92)).sum())
     print(
-        f"fst candidates: {fst_review['fst_name'].nunique()} Fort Salem names have a close "
-        f"Neon candidate ({strong} at score 92+); "
-        f"{int(table['fst_candidate_id'].notna().sum())} auto-filled on the main sheet"
+        f"fst: {int(fst_summary['in_neon'].sum())} sponsors in Neon "
+        f"({int(fst_summary['match_type'].eq('confirmed').sum())} by Don's confirmation, "
+        f"{len(judy)} households -> {JUDY_FILENAME}); "
+        f"{int((~fst_summary['in_neon']).sum())} not in Neon; "
+        f"review sheet: {int(fst_review['status'].eq('undecided').sum())} undecided rows"
     )
+    for name in conflicts:
+        print(f"  CONFLICT (held, not folded): {name} confirmed against two different households")
     print(
         f"mailing list: {len(table)} rows "
         f"({int(table['in_neon'].sum())} in Neon, {int(table['needs_review'].sum())} FST new)"
