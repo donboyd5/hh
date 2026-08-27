@@ -152,7 +152,7 @@ def main() -> None:
     print(
         f"exclusions: {len(qa.get('dropped_deceased_neon', []))} deceased (Neon flag), "
         f"{len(qa.get('dropped_deceased_note', []))} deceased (notes), "
-        f"{len(qa.get('dropped_small_donor', []))} donor-rule rows under $100"
+        f"{len(qa.get('dropped_small_donor', []))} rows under $200 not keep-identified"
     )
     for label in ("dropped_deceased_note", "kept_deceased_note_survivor"):
         names = qa.get(label, [])

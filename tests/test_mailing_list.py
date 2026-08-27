@@ -8,6 +8,7 @@ from hh.analytics.mailing import (
     build_mailing_list,
     engagement_spend,
     fiscal_year,
+    fst_candidates,
     gifts_by_fy,
     pick_contact,
     predominant_engagement,
@@ -71,7 +72,7 @@ def _registrations():
     return pd.DataFrame(
         {
             "registration_id": ["r1", "r2", "r3", "r4"],
-            "household_id": ["H1", "H1", "H2", "H3"],
+            "id": ["H1", "H1", "H2", "H3"],  # rollup id (NA household_id for singles)
             "starts_on": pd.to_datetime(["2025-01-15", "2025-02-01", "2024-09-01", "2015-01-01"]),
             "event_majorcat": ["performance", "class", "other", "performance"],
             "amount": [40.0, 120.0, 75.0, 30.0],
@@ -140,7 +141,7 @@ def test_new_codes_in_name_order():
     assert codes.tolist() == ["new3", "new1", "new2"]  # Able, Mid, Zed order
 
 
-def test_apply_exclusions_deceased_notes_and_small_donor_floor():
+def test_apply_exclusions_deceased_notes_and_donor_floor():
     table = pd.DataFrame(
         {
             "household_name": [
@@ -148,33 +149,68 @@ def test_apply_exclusions_deceased_notes_and_small_donor_floor():
                 "Note Gone",          # hand note says died
                 "Survivor",           # note says died AND a partner survives -> kept
                 "Neon Note Only",     # death only in a NEON staff note -> kept
-                "Small Donor",        # donor-rule only, under $100 -> dropped
-                "Small Curated",      # under $100 but on Judy's list -> kept
-                "Big Donor",          # donor-rule only, over $100 -> kept
+                "Small Donor",        # donor-rule only, under $200 -> dropped
+                "Small Judy Note",    # under $200 with a hand note -> kept
+                "Small Stewarded",    # under $200 with a steward -> kept
+                "Small Responder",    # under $200 but responded to the appeal -> kept
+                "Small Silent",       # under $200 but on the bolded keep-list -> kept
+                "Small Judy Bare",    # under $200, Judy's list, no note/steward -> dropped
+                "Big Donor",          # donor-rule only, over $200 -> kept
                 "Zero Prospect",      # never donated, not donor-rule -> kept (new account)
             ],
-            "id": ["1", "2", "3", "4", "5", "6", "7", "8"],
-            "deceased": [True, False, False, False, False, False, False, False],
+            "id": [str(i) for i in range(1, 13)],
+            "deceased": [True] + [False] * 11,
             "note_donor3": [None, "died 2024", "Tim has died; wife/gf still around",
-                            None, None, None, None, None],
-            "note_neon": [None, None, None, "my uncle passed away; we still attend",
-                          None, None, None, None],
-            "src_donor_5yr": [True, True, True, True, True, True, True, False],
-            "src_donor3": [False, False, False, False, False, True, False, False],
-            "src_new_accounts": [False, False, False, False, False, False, False, True],
-            "src_appeal_responded": [False] * 8,
-            "src_silent_selected": [False] * 8,
-            "don_5yr_total": [500.0, 500.0, 500.0, 500.0, 50.0, 50.0, 500.0, 0.0],
+                            None, None, "friend of the house", None, None, None,
+                            None, None, None],
+            "note_neon": [None, None, None, "my uncle passed away; we still attend"]
+                        + [None] * 8,
+            "steward": [None] * 6 + ["don"] + [None] * 5,  # Small Stewarded has one
+            "src_donor_5yr": [True] * 4 + [True] * 6 + [True, False],
+            "src_donor3": [False] * 5 + [False, False, False, False, True, False, False],
+            "src_new_accounts": [False] * 11 + [True],
+            "src_appeal_responded": [False] * 7 + [True] + [False] * 4,
+            "src_silent_selected": [False] * 8 + [True] + [False] * 3,
+            "fst": [False] * 12,
+            "don_5yr_total": [500.0] * 4 + [100.0] * 6 + [500.0, 0.0],
         }
     )
     out, qa = apply_exclusions(table)
     assert out["household_name"].tolist() == [
-        "Survivor", "Neon Note Only", "Small Curated", "Big Donor", "Zero Prospect",
+        "Survivor", "Neon Note Only", "Small Judy Note", "Small Stewarded",
+        "Small Responder", "Small Silent", "Big Donor", "Zero Prospect",
     ]
     assert qa["dropped_deceased_neon"] == ["Neon Gone"]
     assert qa["dropped_deceased_note"] == ["Note Gone"]
     assert qa["kept_deceased_note_survivor"] == ["Survivor"]
-    assert qa["dropped_small_donor"] == ["Small Donor"]
+    assert qa["dropped_small_donor"] == ["Small Donor", "Small Judy Bare"]
+
+
+def test_fst_candidates_unique_ambiguous_and_none():
+    accounts = pd.DataFrame(
+        {
+            "id": ["H1", "H2", "H3", "H4"],
+            "name": ["Jared and Kyle West", "Rich Butler", "Pat Doe", "Ann Lee"],
+            "full_name": ["Jared West", None, "Pat Doe", "Ann Lee"],
+            "contact_type": ["Individual"] * 4,
+        }
+    )
+    fst_summary = pd.DataFrame(
+        {
+            "name": ["Kyle & Jared West", "Richard Butler", "Ann Lee",
+                     "Sue Doe", "Chris Doe"],
+            "in_neon": [False, False, True, False, False],
+        }
+    )
+    out = fst_candidates(fst_summary, accounts).set_index("name")
+    # partner-order flip still finds the household
+    assert out.loc["Kyle & Jared West", "fst_candidate_id"] == "H1"
+    assert out.loc["Kyle & Jared West", "fst_candidate_name"] == "Jared and Kyle West"
+    # nickname (rich/richard) finds it via the member account name
+    assert out.loc["Richard Butler", "fst_candidate_id"] == "H2"
+    assert "Ann Lee" not in out.index  # exact match already -> no candidate needed
+    assert "Sue Doe" not in out.index  # no compatible given name anywhere
+    assert "Chris Doe" not in out.index  # 'chris' is compatible with no pool given name
 
 
 def _externals():

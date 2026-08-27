@@ -37,7 +37,8 @@ FY_MONTH = 7  # fiscal year starts July 1
 GIVING_FYS = (2022, 2023, 2024, 2025, 2026)
 ENGAGEMENT_FYS = (2024, 2025, 2026)
 DE_MINIMIS_5YR = 10.0
-MIN_DONOR_5YR = 100.0  # donor-rule rows under this are dropped (Don, 2026-08-27)
+# rows under this 5-year total are dropped unless keep-identified (Don, 2026-08-27)
+MIN_DONOR_5YR = 200.0
 
 # a note that says someone died — unless it also says someone survives (e.g. Don's
 # "Tim has died; wife/gf still around; Sue will contact" keeps the household: mail
@@ -76,6 +77,7 @@ OUTPUT_COLUMNS = [
     "predominant_engagement", "do_not_contact", "deceased", "distance_miles",
     "steward", "steward_detail", "note_donor3", "note_new", "note_silent",
     "note_boyd", "note_neon", "fst_years", "fst_years_list", "fst_best_tier",
+    "fst_candidate_id", "fst_candidate_name",
 ]
 
 
@@ -104,13 +106,16 @@ def engagement_spend(registrations: pd.DataFrame, fys: tuple[int, ...]) -> pd.Da
     r["fy"] = fiscal_year(r["starts_on"])
     r = r[r["fy"].isin(fys) & r["event_majorcat"].isin(CATEGORY_GROUPS)]
     r["group"] = r["event_majorcat"].map(CATEGORY_GROUPS)
+    # key on the rollup ``id`` (household id, else account id): ``household_id`` is
+    # blank for single-account households — 6,259 of 28k registrations — and keying on
+    # it silently zeroed their engagement (found 2026-08-28)
     spend = r.pivot_table(
-        index="household_id", columns="group", values="amount", aggfunc="sum", fill_value=0.0
+        index="id", columns="group", values="amount", aggfunc="sum", fill_value=0.0
     )
     spend = spend.reindex(columns=["arts", "classes", "community"], fill_value=0.0)
     spend.columns = [f"{c}_spend_3fy" for c in spend.columns]
-    counts = r.groupby("household_id").size().rename("regs_3fy")
-    return spend.join(counts).reset_index().rename(columns={"household_id": "id"})
+    counts = r.groupby("id").size().rename("regs_3fy")
+    return spend.join(counts).reset_index()
 
 
 def predominant_engagement(row: pd.Series) -> str:
@@ -221,10 +226,11 @@ def apply_exclusions(
     - **Deceased**: the Neon deceased flag, or any hand/Neon note saying someone died —
       unless the note also names a survivor ("Tim has died; wife/gf still around"),
       since the mail then goes to the surviving partner.
-    - **Small donor-rule rows**: rows included *only* by the ≥$10 5-year giving rule and
-      giving under ``min_donor_5yr`` ($100). Households from a curated source (Judy's
-      donor or new-accounts lists, the bolded silent keep-list, appeal responders) and
-      the non-Neon Fort Salem review rows survive regardless of amount.
+    - **Small givers**: rows with under ``min_donor_5yr`` ($200) in 5 years drop unless
+      keep-identified — a new person (Judy's new-accounts list, or Fort Salem), one of
+      Don's hand notes or a steward assignment, the bolded silent keep-list, or an appeal
+      responder (Don, 2026-08-27). Neon staff notes do not identify a keeper, consistent
+      with the deceased scan.
 
     QA names every dropped household and why, so nothing disappears silently.
     """
@@ -235,14 +241,15 @@ def apply_exclusions(
     by_note = died & ~survivor
     deceased = neon_deceased | by_note
 
-    curated = table[
-        ["src_donor3", "src_new_accounts", "src_appeal_responded", "src_silent_selected"]
-    ].any(axis=1)
-    small = (
-        table["src_donor_5yr"].fillna(False)
-        & ~curated
-        & (table["don_5yr_total"].fillna(0) < min_donor_5yr)
+    keep_identified = (
+        table["src_new_accounts"].fillna(False)
+        | table["fst"].fillna(False)
+        | table["src_silent_selected"].fillna(False)
+        | table["src_appeal_responded"].fillna(False)
+        | (notes.str.len() > 0)
+        | table["steward"].notna()
     )
+    small = (table["don_5yr_total"].fillna(0) < min_donor_5yr) & ~keep_identified
 
     qa = {
         "dropped_deceased_neon": table.loc[
@@ -255,6 +262,81 @@ def apply_exclusions(
         "dropped_small_donor": table.loc[small, "household_name"].tolist(),
     }
     return table[~deceased & ~small].reset_index(drop=True), qa
+
+
+_STOP_TOKENS = {"&", "and", "the", "family"}
+
+
+def _name_tokens(name: str) -> tuple[str | None, list[str]]:
+    """(surname, given names) from a person or household label, lowercased.
+
+    "Kyle & Jared West" -> ("west", ["kyle", "jared"]); parenthetical asides are
+    dropped, so "Kathleen King (in memory of Bob Skinner)" keeps surname king.
+    """
+    s = re.sub(r"\(.*?\)", "", str(name)).lower()
+    tokens = [t.strip(",.") for t in s.split() if t.strip(",.")]
+    if len(tokens) < 2:
+        return None, []
+    return tokens[-1], [t for t in tokens[:-1] if t not in _STOP_TOKENS]
+
+
+def _given_compatible(a: str, b: str) -> bool:
+    """Two given names that could be the same person: shared 3-letter start, or one a
+    short form of the other (dan/daniel, rich/richard)."""
+    return a[:3] == b[:3] or a.startswith(b) or b.startswith(a)
+
+
+def fst_candidates(fst_summary: pd.DataFrame, accounts: pd.DataFrame) -> pd.DataFrame:
+    """The unique plausible Neon household per Fort Salem name that lacks an exact match.
+
+    Fort Salem's lists use casual names, so an exact match is not the whole story:
+    partner-order flips ("Kyle & Jared West" vs "Jared and Kyle West"), nicknames
+    ("Richard Butler" vs "Rich Butler"), and compound names ("Amy Wise Foster") hide
+    real matches. A name gets a candidate only when exactly one Neon household shares
+    its surname and has a compatible given name among the household label or any member
+    account name — ambiguous or absent matches are left blank for the keep/drop review,
+    never guessed (about 46 candidates in the 2026-08 data; ~302 names have none).
+
+    Returns ``[name, fst_candidate_id, fst_candidate_name]`` for candidate rows only.
+    """
+    # surname -> given name -> rollup household ids, from household labels and every
+    # individual member account name (a member's name may not appear in the label)
+    index: dict[str, dict[str, set[str]]] = {}
+    label_of: dict[str, str] = {}
+
+    def add(name: str, hh_id: str) -> None:
+        surname, givens = _name_tokens(name)
+        if not surname:
+            return
+        for given in givens or [()]:
+            index.setdefault(surname, {}).setdefault(given, set()).add(hh_id)
+
+    hh = accounts.drop_duplicates(subset=["id"])
+    for hh_id, label in zip(hh["id"], hh["name"], strict=True):
+        label_of[str(hh_id)] = str(label)
+        add(str(label), str(hh_id))
+    indiv = accounts[accounts.get("contact_type", "").eq("Individual") & accounts["full_name"].notna()]
+    for hh_id, full_name in zip(indiv["id"], indiv["full_name"], strict=True):
+        add(str(full_name), str(hh_id))
+
+    rows = []
+    exact = fst_summary["in_neon"] == True if "in_neon" in fst_summary else None  # noqa: E712
+    for i, name in enumerate(fst_summary["name"]):
+        if exact is not None and bool(exact.iloc[i]):
+            continue  # already matched exactly; no candidate needed
+        surname, givens = _name_tokens(name)
+        if not surname or not givens:
+            continue
+        hits: set[str] = set()
+        for pool_given, hh_ids in index.get(surname, {}).items():
+            if pool_given and any(_given_compatible(g, pool_given) for g in givens):
+                hits |= hh_ids
+        if len(hits) == 1:
+            hh_id = next(iter(hits))
+            rows.append(
+                {"name": name, "fst_candidate_id": hh_id, "fst_candidate_name": label_of[hh_id]}
+            )
+    return pd.DataFrame(rows, columns=["name", "fst_candidate_id", "fst_candidate_name"])
 
 
 def _new_codes(names: pd.Series) -> pd.Series:
@@ -359,6 +441,17 @@ def build_mailing_list(
         ignore_index=True,
     )
     table["household_name"] = table["household_name"].fillna(table.pop("fst_name"))
+
+    # Fort Salem candidate households for the non-exact names (review, never auto-merge)
+    candidates = fst_candidates(fst_summary, accounts)
+    if candidates.empty:
+        table["fst_candidate_id"] = pd.NA
+        table["fst_candidate_name"] = pd.NA
+    else:
+        table = table.merge(
+            candidates.rename(columns={"name": "household_name"}),
+            on="household_name", how="left",
+        )
 
     # -- flags and indicators --------------------------------------------------------
     table["in_neon"] = table["id"].notna()
