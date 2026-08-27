@@ -68,7 +68,9 @@ def main() -> None:
     households = accounts.drop_duplicates(subset=["id"])[["id", "name", "city"]]
 
     donor3 = _matched(ml.load_donor3(), households)
-    new_accounts = _matched(ml.load_new_accounts(), households)
+    # only new accounts with >= $100 lifetime registrations (Judy's column) qualify
+    new_accounts_all = ml.load_new_accounts()
+    new_accounts = _matched(ml.qualifying_new_accounts(new_accounts_all), households)
     djb = ml.load_djb_workbook()
     silent_selected = _matched(djb["silent_selected"], households)
     appeal_responded = _matched(djb["appeal_responded"], households)
@@ -145,6 +147,10 @@ def main() -> None:
         ]
     }
     qa = table.attrs.get("exclusion_qa", {})
+    print(
+        f"new accounts: {len(new_accounts)} of {len(new_accounts_all)} clear "
+        f"${ml.MIN_NEW_ACCOUNT_REGISTRATION:.0f} in lifetime registrations"
+    )
     print(
         f"mailing list: {len(table)} rows "
         f"({int(table['in_neon'].sum())} in Neon, {int(table['needs_review'].sum())} FST new)"

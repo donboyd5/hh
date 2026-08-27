@@ -191,6 +191,20 @@ NEW_ACCOUNTS_COLUMNS = {
 }
 
 
+# Judy's "HH/Acct. All Registration Amount" floor for a new account to make the list:
+# a new account with under this in lifetime registrations is a one-time ticket buyer,
+# not a prospect (Don, 2026-08-28). Rows with a hand note all clear it in the 2026-08 data.
+MIN_NEW_ACCOUNT_REGISTRATION = 100.0
+
+
+def qualifying_new_accounts(
+    new_accounts: pd.DataFrame, *, min_registration: float = MIN_NEW_ACCOUNT_REGISTRATION
+) -> pd.DataFrame:
+    """New-account rows whose lifetime registration amount reaches the floor."""
+    amount = pd.to_numeric(new_accounts["lifetime_registration_amount"], errors="coerce")
+    return new_accounts[amount.fillna(0) >= min_registration].reset_index(drop=True)
+
+
 def load_new_accounts(path: Path | None = None) -> pd.DataFrame:
     """Cleaned new-account rows (FY25–FY26 entrants) with hand notes from the right edge."""
     src = Path(path) if path is not None else _ext_path(NEW_ACCOUNTS_FILENAME)
