@@ -29,7 +29,7 @@ depends on the live API.
   state, ZIP, country), contact info (email, phone), and the **deceased** and **do-not-contact**
   flags used to filter people out.
 - **Donations** — every gift. One row per donation, tied to an account by account id. Carries
-  amount, date, type (`DONATION` or `PLEDBGEPAYMENT`), status (e.g. `SUCCEEDED`), and fund /
+  amount, date, type (`DONATION` or `PLEDGEPAYMENT`), status (e.g. `SUCCEEDED`), and fund /
   campaign / purpose / source. It carries no household id; that link is recovered during cleaning.
 - **Events** — every scheduled event: a single performance, class, or community happening. One row
   per Neon event. Carries the event name, Neon's event category, start and end dates, capacity, and
@@ -112,7 +112,7 @@ household level.
   account id. A person in a Neon household is counted once with their housemates; a standalone
   account is its own household.
 - **Donor.** A household whose total succeeded individual gifts are greater than zero. A gift counts
-  when its status is `SUCCEEDED`, its type is `DONATION` or `PLEDBGEPAYMENT`, and the account is an
+  when its status is `SUCCEEDED`, its type is `DONATION` or `PLEDGEPAYMENT`, and the account is an
   `Individual`; we then drop gifts from accounts marked deceased or do-not-contact, and a known junk
   account (`36805`). Variables used: `donation_amount`, `donation_status`, `donation_type`,
   `account_type`, `deceased`, `do_not_contact`.
@@ -151,7 +151,7 @@ household level.
   lifetime are "large donors" and **$5,000+** are "major donors." These drive the preferences
   chapter, where lifetime giving measures the depth of the relationship.
 - **Donor basis.** Size and persistence start from `succeeded_individual_gifts` (status
-  `SUCCEEDED`, type `DONATION`/`PLEDBGEPAYMENT`, account type `Individual`) rolled up to the
+  `SUCCEEDED`, type `DONATION`/`PLEDGEPAYMENT`, account type `Individual`) rolled up to the
   household — the same basis as `households_summary.total_donations`, so the figures reconcile
   with the headline donor counts.
 - **Retention.** Of households that gave in year Y, the share that also gave in Y+1. The
@@ -172,7 +172,7 @@ fall 2025 annual appeal with those that were not.
   account ids; recipients are mapped to households through the current Neon accounts.
   Subtotal rows, duplicate rows, and placeholder rows are dropped on load; a handful of
   recipients with no id at all are excluded from household-level rates.
-- **Responded** means at least one SUCCEEDED `DONATION`/`PLEDBGEPAYMENT` gift to the
+- **Responded** means at least one SUCCEEDED `DONATION`/`PLEDGEPAYMENT` gift to the
   campaign *Annual Fund Drive - 2025-2026* dated 2025-10-01 through 2026-01-31, on any
   account in the household — the gift often arrives on a spouse's account rather than
   the one that was mailed.
