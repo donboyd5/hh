@@ -18,6 +18,8 @@ from __future__ import annotations
 from pathlib import Path
 
 import pandas as pd
+from openpyxl.styles import Font, PatternFill
+from openpyxl.worksheet.datavalidation import DataValidation
 
 from hh import config, io
 from hh.analytics.fst_match import fuzzy_fst_candidates
@@ -58,6 +60,29 @@ def _matched(frame: pd.DataFrame, households: pd.DataFrame) -> pd.DataFrame:
             ids[i] = HOUSEHOLD_ALIASES[str(name).strip()]
             how[i] = "alias"
     return frame.assign(id=ids, match=how)
+
+
+def _freeze_header(ws) -> None:
+    ws.freeze_panes = "A2"
+    for cell in ws[1]:
+        cell.font = Font(bold=True)
+
+
+def _format_review_sheet(ws, *, n_rows: int) -> None:
+    """Make the review sheet obvious to mark: wide bold CONFIRM column with a Y/N
+    dropdown, frozen header, readable widths on the name columns."""
+    _freeze_header(ws)
+    widths = {"A": 16, "B": 34, "C": 20, "D": 18, "I": 30, "K": 34, "L": 16, "M": 60}
+    for col, width in widths.items():
+        ws.column_dimensions[col].width = width
+    ws["A1"].fill = PatternFill("solid", fgColor="FFF2CC")
+    if n_rows:
+        dv = DataValidation(type="list", formula1='"Y,N"', allow_blank=True)
+        dv.prompt, dv.promptTitle = "Y = same household, N = different", "Confirm"
+        ws.add_data_validation(dv)
+        dv.add(f"A2:A{n_rows + 1}")
+        for r in range(2, n_rows + 2):
+            ws[f"A{r}"].fill = PatternFill("solid", fgColor="FFF2CC")
 
 
 def main() -> None:
@@ -108,9 +133,14 @@ def main() -> None:
 
     io.write_parquet(table, "processed", "mailing_list.parquet")
     io.write_parquet(fst_review, "processed", "fst_candidates.parquet")
-    with pd.ExcelWriter(config.layer_dir("processed") / XLSX_FILENAME, engine="openpyxl") as xw:
+    xlsx_path = config.layer_dir("processed") / XLSX_FILENAME
+    with pd.ExcelWriter(xlsx_path, engine="openpyxl") as xw:
         table.to_excel(xw, sheet_name="mailing-list", index=False)
-        fst_review.to_excel(xw, sheet_name="fst-candidates", index=False)
+        fst_review.rename(columns={"confirm": "CONFIRM (Y/N)"}).to_excel(
+            xw, sheet_name="fst-candidates", index=False
+        )
+        _format_review_sheet(xw.sheets["fst-candidates"], n_rows=len(fst_review))
+        _freeze_header(xw.sheets["mailing-list"])
         pd.DataFrame(
             {
                 "item": [
