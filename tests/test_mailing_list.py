@@ -4,6 +4,7 @@ import pandas as pd
 from hh.analytics.mailing import (
     OUTPUT_COLUMNS,
     _new_codes,
+    apply_exclusions,
     build_mailing_list,
     engagement_spend,
     fiscal_year,
@@ -29,7 +30,7 @@ def _accounts():
             "company_name": [None, None, None, None],
             "account_type": ["Individual"] * 4,
             "contact_type": ["Individual"] * 4,
-            "deceased": [False, False, False, True],
+            "deceased": [False, False, False, False],
             "do_not_contact": [False, False, True, False],
             "address_line1": ["1 Main St", None, "2 Elm St", None],
             "address_line2": [None, None, "Apt 2", None],
@@ -115,7 +116,9 @@ def test_predominant_engagement_labels():
 
 
 def test_pick_contact_most_gifts_then_fallback():
-    out = pick_contact(_accounts(), _donations()).set_index("id")
+    accounts = _accounts()
+    accounts.loc[3, "deceased"] = True  # exercise the household ANY-flag here
+    out = pick_contact(accounts, _donations()).set_index("id")
     # A1 has two gifts (d1 and the pledge payment d2) vs A2's one -> A1 (Ann) is the
     # contact; her missing email falls back to Bob's, other fields are her own
     row = out.loc["H1"]
@@ -135,6 +138,43 @@ def test_pick_contact_most_gifts_then_fallback():
 def test_new_codes_in_name_order():
     codes = _new_codes(pd.Series(["Zed", "Able", "Mid"]))
     assert codes.tolist() == ["new3", "new1", "new2"]  # Able, Mid, Zed order
+
+
+def test_apply_exclusions_deceased_notes_and_small_donor_floor():
+    table = pd.DataFrame(
+        {
+            "household_name": [
+                "Neon Gone",          # Neon deceased flag
+                "Note Gone",          # hand note says died
+                "Survivor",           # note says died AND a partner survives -> kept
+                "Neon Note Only",     # death only in a NEON staff note -> kept
+                "Small Donor",        # donor-rule only, under $100 -> dropped
+                "Small Curated",      # under $100 but on Judy's list -> kept
+                "Big Donor",          # donor-rule only, over $100 -> kept
+                "Zero Prospect",      # never donated, not donor-rule -> kept (new account)
+            ],
+            "id": ["1", "2", "3", "4", "5", "6", "7", "8"],
+            "deceased": [True, False, False, False, False, False, False, False],
+            "note_donor3": [None, "died 2024", "Tim has died; wife/gf still around",
+                            None, None, None, None, None],
+            "note_neon": [None, None, None, "my uncle passed away; we still attend",
+                          None, None, None, None],
+            "src_donor_5yr": [True, True, True, True, True, True, True, False],
+            "src_donor3": [False, False, False, False, False, True, False, False],
+            "src_new_accounts": [False, False, False, False, False, False, False, True],
+            "src_appeal_responded": [False] * 8,
+            "src_silent_selected": [False] * 8,
+            "don_5yr_total": [500.0, 500.0, 500.0, 500.0, 50.0, 50.0, 500.0, 0.0],
+        }
+    )
+    out, qa = apply_exclusions(table)
+    assert out["household_name"].tolist() == [
+        "Survivor", "Neon Note Only", "Small Curated", "Big Donor", "Zero Prospect",
+    ]
+    assert qa["dropped_deceased_neon"] == ["Neon Gone"]
+    assert qa["dropped_deceased_note"] == ["Note Gone"]
+    assert qa["kept_deceased_note_survivor"] == ["Survivor"]
+    assert qa["dropped_small_donor"] == ["Small Donor"]
 
 
 def _externals():
@@ -192,7 +232,8 @@ def test_build_mailing_list_end_to_end():
     assert h1["src_donor_5yr"]  # 5yr total $2,037.50 >= $10
     assert h1["don_lifetime"] == 5.0 + 10.0 + 2022.5  # H1's own lifetime gifts only
     assert h1["predominant_engagement"] == "both"
-    assert h1["neon_ids"] == "A1,A2"
+    assert h1["neon_account_ids"] == "A1,A2"
+    assert table.attrs["exclusion_qa"] is not None
 
     # H2: donor3 steward/notes + silent note merged; fst flag set via Neon match
     h2 = table.loc["Carol Dane"]
@@ -206,7 +247,6 @@ def test_build_mailing_list_end_to_end():
     h3 = table.loc["New Person"]
     assert h3["no_gift_last_5yrs"] and not h3["never_donated"]
     assert h3["src_new_accounts"] and h3["note_new"] == "came to gala"
-    assert h3["deceased"]
 
     # Zed Sponsor: Fort Salem only, not in Neon -> new code, needs review, zeros
     zed = table.loc["Zed Sponsor"]
