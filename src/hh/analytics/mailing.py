@@ -26,6 +26,8 @@ being a Fort Salem sponsor alone does not add an existing Neon household, per th
 """
 from __future__ import annotations
 
+import re
+
 import pandas as pd
 
 from ..analytics.donors import succeeded_individual_gifts
@@ -35,6 +37,15 @@ FY_MONTH = 7  # fiscal year starts July 1
 GIVING_FYS = (2022, 2023, 2024, 2025, 2026)
 ENGAGEMENT_FYS = (2024, 2025, 2026)
 DE_MINIMIS_5YR = 10.0
+MIN_DONOR_5YR = 100.0  # donor-rule rows under this are dropped (Don, 2026-08-27)
+
+# a note that says someone died — unless it also says someone survives (e.g. Don's
+# "Tim has died; wife/gf still around; Sue will contact" keeps the household: mail
+# goes to the survivor). Only explicit survivor phrases guard: "husband died 2024"
+# names the deceased, not a survivor. Every note-based drop is listed in the export
+# QA for eyeballing, so an ambiguous note surfaces rather than silently dropping.
+_DEATH_NOTE = re.compile(r"\b(?:died|deceased|passed away|passing)\b", re.I)
+_SURVIVOR_NOTE = re.compile(r"\b(?:still around|surviving|survivor)\b", re.I)
 
 # registration category -> engagement group for the mailing list
 CATEGORY_GROUPS = {
@@ -46,26 +57,25 @@ CATEGORY_GROUPS = {
 
 DON_FY_COLUMNS = [f"don_fy{fy}" for fy in GIVING_FYS]
 
+# column order in the exported table (Don, 2026-08-27): the three id codes, the
+# household name, donation history, contact info, then everything else
 OUTPUT_COLUMNS = [
-    # identity
-    "id", "neon_ids", "new_code", "household_name", "in_neon",
-    # inclusion sources
-    "src_donor_5yr", "src_donor3", "src_new_accounts", "src_appeal_responded",
-    "src_silent_selected", "fst", "needs_review",
-    # donor indicators and totals
-    "never_donated", "gave_fy26", "gave_fy25", "no_gift_last_5yrs",
+    # the three codes, then the household name
+    "neon_hh_id", "neon_account_ids", "new_code", "household_name",
+    # donation history
     *DON_FY_COLUMNS, "don_5yr_total", "don_lifetime",
-    # engagement
-    "arts_spend_3fy", "classes_spend_3fy", "community_spend_3fy", "regs_3fy",
-    "predominant_engagement",
-    # contact / mailing
+    # contact info
     "contact_first_name", "contact_last_name", "salutation", "address", "city",
-    "state_province", "zip_code", "phone", "email", "do_not_contact", "deceased",
-    "distance_miles",
-    # stewardship
-    "steward", "steward_detail", "note_donor3", "note_new", "note_silent", "note_neon",
-    # Fort Salem detail
-    "fst_years", "fst_years_list", "fst_best_tier",
+    "state_province", "zip_code", "phone", "email",
+    # everything else: identity/source flags, indicators, engagement, stewardship,
+    # notes, Fort Salem detail
+    "in_neon", "src_donor_5yr", "src_donor3", "src_new_accounts",
+    "src_appeal_responded", "src_silent_selected", "fst", "needs_review",
+    "never_donated", "gave_fy26", "gave_fy25", "no_gift_last_5yrs",
+    "arts_spend_3fy", "classes_spend_3fy", "community_spend_3fy", "regs_3fy",
+    "predominant_engagement", "do_not_contact", "deceased", "distance_miles",
+    "steward", "steward_detail", "note_donor3", "note_new", "note_silent",
+    "note_boyd", "note_neon", "fst_years", "fst_years_list", "fst_best_tier",
 ]
 
 
@@ -183,6 +193,70 @@ def neon_ids_by_household(accounts: pd.DataFrame) -> pd.DataFrame:
     )
 
 
+def _combined_notes(table: pd.DataFrame) -> pd.Series:
+    """Don's hand notes joined into one string per row (for death-note scanning).
+
+    Deliberately excludes ``note_neon`` (Neon staff narratives): those mention deaths
+    of non-account people ("my uncle… passed away") and contradict themselves
+    ("passed away according to Benjie… now 93 and still lives in NYC"), and Don's
+    instruction was to honor notes *from him*, not staff notes.
+    """
+    cols = [
+        c for c in ("note_donor3", "note_new", "note_silent", "note_boyd")
+        if c in table.columns
+    ]
+    if not cols:
+        return pd.Series("", index=table.index, dtype="string")
+    joined = table[cols].astype("string").apply(
+        lambda row: " | ".join(part for part in row if pd.notna(part)), axis=1
+    )
+    return joined.fillna("")
+
+
+def apply_exclusions(
+    table: pd.DataFrame, *, min_donor_5yr: float = MIN_DONOR_5YR
+) -> tuple[pd.DataFrame, dict]:
+    """Drop households Don excluded (2026-08-27), returning the table and a QA report.
+
+    - **Deceased**: the Neon deceased flag, or any hand/Neon note saying someone died —
+      unless the note also names a survivor ("Tim has died; wife/gf still around"),
+      since the mail then goes to the surviving partner.
+    - **Small donor-rule rows**: rows included *only* by the ≥$10 5-year giving rule and
+      giving under ``min_donor_5yr`` ($100). Households from a curated source (Judy's
+      donor or new-accounts lists, the bolded silent keep-list, appeal responders) and
+      the non-Neon Fort Salem review rows survive regardless of amount.
+
+    QA names every dropped household and why, so nothing disappears silently.
+    """
+    notes = _combined_notes(table)
+    died = notes.str.contains(_DEATH_NOTE).fillna(False)
+    survivor = notes.str.contains(_SURVIVOR_NOTE).fillna(False)
+    neon_deceased = table["deceased"].fillna(False).astype(bool)
+    by_note = died & ~survivor
+    deceased = neon_deceased | by_note
+
+    curated = table[
+        ["src_donor3", "src_new_accounts", "src_appeal_responded", "src_silent_selected"]
+    ].any(axis=1)
+    small = (
+        table["src_donor_5yr"].fillna(False)
+        & ~curated
+        & (table["don_5yr_total"].fillna(0) < min_donor_5yr)
+    )
+
+    qa = {
+        "dropped_deceased_neon": table.loc[
+            neon_deceased & ~by_note, "household_name"
+        ].tolist(),
+        "dropped_deceased_note": table.loc[by_note, "household_name"].tolist(),
+        "kept_deceased_note_survivor": table.loc[
+            died & survivor, "household_name"
+        ].tolist(),
+        "dropped_small_donor": table.loc[small, "household_name"].tolist(),
+    }
+    return table[~deceased & ~small].reset_index(drop=True), qa
+
+
 def _new_codes(names: pd.Series) -> pd.Series:
     """``new1``, ``new2``, … assigned in name order (stable across reruns)."""
     order = sorted(range(len(names)), key=lambda i: str(names.iloc[i]))
@@ -202,12 +276,16 @@ def build_mailing_list(
     silent_selected: pd.DataFrame,
     appeal_responded: pd.DataFrame,
     fst_summary: pd.DataFrame,
+    boyd_notes: dict[str, str] | None = None,
 ) -> pd.DataFrame:
     """Assemble the mailing list.
 
     External frames are keyed by matched rollup ``id`` (from
     :func:`hh.external.mailing.match_households`); ``fst_summary`` additionally carries
-    ``in_neon`` (bool). Returns one row per household in :data:`OUTPUT_COLUMNS` order.
+    ``in_neon`` (bool). ``boyd_notes`` is Don's ``{rollup id: note}`` file
+    (:func:`hh.external.notes.load_boyd_notes`). Returns one row per household in
+    :data:`OUTPUT_COLUMNS` order; the exclusion QA (who was dropped and why) rides
+    along on ``table.attrs["exclusion_qa"]``.
     """
     households = accounts[["id", "name"]].drop_duplicates(subset=["id"])
 
@@ -333,6 +411,15 @@ def build_mailing_list(
     table["new_code"] = pd.NA
     table.loc[is_new, "new_code"] = _new_codes(table.loc[is_new, "household_name"]).values
 
+    # -- Don's hand notes (boyd-notes.yaml), as a column and as a death-note source --
+    if boyd_notes:
+        table["note_boyd"] = table["id"].map(boyd_notes).astype("string")
+    elif "note_boyd" not in table.columns:
+        table["note_boyd"] = pd.NA
+
+    # -- exclusions (deceased; small donor-rule rows) -------------------------------
+    table, exclusion_qa = apply_exclusions(table)
+
     table = table.sort_values("household_name").reset_index(drop=True)
     if table.duplicated(subset=["household_name", "id"]).any():
         # a merge exploded rows (an NA id keying against another frame) — fail loudly
@@ -341,4 +428,9 @@ def build_mailing_list(
         # surface in the export QA instead.)
         dups = table.loc[table.duplicated(subset=["household_name", "id"]), "household_name"]
         raise ValueError(f"duplicated households in mailing list (merge explosion?): {list(dups.head())}")
-    return table[OUTPUT_COLUMNS]
+
+    # output-facing names: the join key becomes the household id code, and the member
+    # account ids read as what they are (internal callers still use id / neon_ids)
+    out = table.rename(columns={"id": "neon_hh_id", "neon_ids": "neon_account_ids"})
+    out.attrs["exclusion_qa"] = exclusion_qa
+    return out[OUTPUT_COLUMNS]

@@ -26,6 +26,7 @@ from hh.clean.donations import clean_donations
 from hh.external import fortsalem as fst
 from hh.external import mailing as ml
 from hh.external.mailing import match_households
+from hh.external.notes import load_boyd_notes
 from hh.external.provenance import append_external_manifest, external_source_entry
 
 XLSX_FILENAME = "hh-mailing-list.xlsx"
@@ -91,6 +92,7 @@ def main() -> None:
         silent_selected=silent_selected,
         appeal_responded=appeal_responded,
         fst_summary=fst_summary,
+        boyd_notes=load_boyd_notes(),
     )
 
     io.write_parquet(table, "processed", "mailing_list.parquet")
@@ -142,10 +144,20 @@ def main() -> None:
             ("appeal_responded", appeal_responded),
         ]
     }
+    qa = table.attrs.get("exclusion_qa", {})
     print(
         f"mailing list: {len(table)} rows "
         f"({int(table['in_neon'].sum())} in Neon, {int(table['needs_review'].sum())} FST new)"
     )
+    print(
+        f"exclusions: {len(qa.get('dropped_deceased_neon', []))} deceased (Neon flag), "
+        f"{len(qa.get('dropped_deceased_note', []))} deceased (notes), "
+        f"{len(qa.get('dropped_small_donor', []))} donor-rule rows under $100"
+    )
+    for label in ("dropped_deceased_note", "kept_deceased_note_survivor"):
+        names = qa.get(label, [])
+        if names:
+            print(f"  {label}: {names}")
     for source, names in unmatched.items():
         if names:
             print(f"  UNMATCHED {source} ({len(names)}): {names[:8]}")
