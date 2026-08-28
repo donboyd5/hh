@@ -268,13 +268,21 @@ def _combined_notes(table: pd.DataFrame) -> pd.Series:
 
 
 def apply_exclusions(
-    table: pd.DataFrame, *, min_donor_5yr: float = MIN_DONOR_5YR
+    table: pd.DataFrame,
+    *,
+    min_donor_5yr: float = MIN_DONOR_5YR,
+    drop_do_not_contact: bool = False,
 ) -> tuple[pd.DataFrame, dict]:
     """Drop households Don excluded (2026-08-27), returning the table and a QA report.
 
     - **Deceased**: the Neon deceased flag, or any hand/Neon note saying someone died —
       unless the note also names a survivor ("Tim has died; wife/gf still around"),
       since the mail then goes to the surviving partner.
+    - **Do-not-contact**: flagged, NOT dropped by default. Neon's flag sits on 422
+      households with $674k of lifetime giving — Dorothy Ashton, the Neubohns, Estey, Katz,
+      Merrill, Slack, Kruger — so it cannot mean "never contact" (2026-08-28; likely an
+      email opt-out or import artifact — Judy to confirm). ``drop_do_not_contact=True``
+      drops them once the flag's meaning is settled; the QA lists them either way.
     - **Small givers**: rows with under ``min_donor_5yr`` ($200) in 5 years drop unless
       keep-identified — a new person (Judy's new-accounts list, or Fort Salem), one of
       Don's hand notes or a steward assignment, the bolded silent keep-list, an appeal
@@ -302,8 +310,15 @@ def apply_exclusions(
         | table["steward"].notna()
     )
     small = (table["don_5yr_total"].fillna(0) < min_donor_5yr) & ~keep_identified
+    dnc = table["do_not_contact"].fillna(False).astype(bool)
+    if not drop_do_not_contact:
+        dnc = pd.Series(False, index=table.index)
 
     qa = {
+        "do_not_contact": table.loc[
+            table["do_not_contact"].fillna(False).astype(bool) & ~deceased & ~small, "household_name"
+        ].tolist(),
+        "dropped_do_not_contact": table.loc[dnc & ~deceased, "household_name"].tolist(),
         "dropped_deceased_neon": table.loc[
             neon_deceased & ~by_note, "household_name"
         ].tolist(),
@@ -313,7 +328,7 @@ def apply_exclusions(
         ].tolist(),
         "dropped_small_donor": table.loc[small, "household_name"].tolist(),
     }
-    return table[~deceased & ~small].reset_index(drop=True), qa
+    return table[~deceased & ~small & ~dnc].reset_index(drop=True), qa
 
 
 def fst_candidates(fst_summary: pd.DataFrame, accounts: pd.DataFrame) -> pd.DataFrame:

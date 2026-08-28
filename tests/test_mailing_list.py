@@ -163,35 +163,42 @@ def test_apply_exclusions_deceased_notes_and_donor_floor():
                 "Small Judy Bare",    # under $200, Judy's list, no note/steward -> dropped
                 "Big Donor",          # donor-rule only, over $200 -> kept
                 "Zero Prospect",      # never donated, not donor-rule -> kept (new account)
+                "Do Not Contact",     # Neon do-not-contact flag -> kept, listed in QA
             ],
-            "id": [str(i) for i in range(1, 13)],
-            "deceased": [True] + [False] * 11,
+            "id": [str(i) for i in range(1, 14)],
+            "deceased": [True] + [False] * 12,
+            "do_not_contact": [False] * 12 + [True],
             "note_donor3": [None, "died 2024", "Tim has died; wife/gf still around",
                             None, None, "friend of the house", None, None, None,
-                            None, None, None],
+                            None, None, None, None],
             "note_neon": [None, None, None, "my uncle passed away; we still attend"]
-                        + [None] * 8,
-            "steward": [None] * 6 + ["don"] + [None] * 5,  # Small Stewarded has one
-            "src_donor_5yr": [True] * 4 + [True] * 6 + [True, False],
-            "src_donor3": [False] * 5 + [False, False, False, False, True, False, False],
-            "src_new_accounts": [False] * 11 + [True],
-            "src_appeal_responded": [False] * 7 + [True] + [False] * 4,
-            "src_appeal_gift": [False] * 12,
-            "src_engaged_nondonor": [False] * 12,
-            "src_silent_selected": [False] * 8 + [True] + [False] * 3,
-            "fst": [False] * 12,
-            "don_5yr_total": [500.0] * 4 + [100.0] * 6 + [500.0, 0.0],
+                        + [None] * 9,
+            "steward": [None] * 6 + ["don"] + [None] * 6,  # Small Stewarded has one
+            "src_donor_5yr": [True] * 4 + [True] * 6 + [True, False, True],
+            "src_donor3": [False] * 5 + [False, False, False, False, True, False, False, False],
+            "src_new_accounts": [False] * 11 + [True, False],
+            "src_appeal_responded": [False] * 7 + [True] + [False] * 5,
+            "src_appeal_gift": [False] * 13,
+            "src_engaged_nondonor": [False] * 13,
+            "src_silent_selected": [False] * 8 + [True] + [False] * 4,
+            "fst": [False] * 13,
+            "don_5yr_total": [500.0] * 4 + [100.0] * 6 + [500.0, 0.0, 900.0],
         }
     )
     out, qa = apply_exclusions(table)
     assert out["household_name"].tolist() == [
         "Survivor", "Neon Note Only", "Small Judy Note", "Small Stewarded",
-        "Small Responder", "Small Silent", "Big Donor", "Zero Prospect",
+        "Small Responder", "Small Silent", "Big Donor", "Zero Prospect", "Do Not Contact",
     ]
     assert qa["dropped_deceased_neon"] == ["Neon Gone"]
     assert qa["dropped_deceased_note"] == ["Note Gone"]
     assert qa["kept_deceased_note_survivor"] == ["Survivor"]
     assert qa["dropped_small_donor"] == ["Small Donor", "Small Judy Bare"]
+    assert qa["do_not_contact"] == ["Do Not Contact"]  # flagged, still in the table
+    assert "Do Not Contact" in out["household_name"].tolist()
+    out2, qa2 = apply_exclusions(table, drop_do_not_contact=True)
+    assert "Do Not Contact" not in out2["household_name"].tolist()
+    assert qa2["dropped_do_not_contact"] == ["Do Not Contact"]
 
 
 def test_fst_candidates_unique_ambiguous_and_none():
