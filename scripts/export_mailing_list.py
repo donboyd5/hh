@@ -347,11 +347,11 @@ def main() -> None:
          "fst_candidate_name"]
     ].rename(columns={"fst_years": "years_sponsored", "fst_years_list": "years",
                       "fst_candidate_name": "possible_neon_match_unconfirmed"})
-    prospects = prospects.sort_values(
-        ["address", "years_sponsored", "household_name"], ascending=[False, False, True],
-        na_position="last",
-    )
-    with pd.ExcelWriter(config.layer_dir("processed") / PROSPECTS_FILENAME, engine="openpyxl") as xw:
+    prospects = prospects.assign(_has_address=prospects["address"].notna()).sort_values(
+        ["_has_address", "years_sponsored", "household_name"], ascending=[False, False, True]
+    ).drop(columns="_has_address")
+    prospects_path = config.layer_dir("processed") / PROSPECTS_FILENAME
+    with pd.ExcelWriter(prospects_path, engine="openpyxl") as xw:
         prospects.to_excel(xw, sheet_name="prospects", index=False)
         _freeze_header(xw.sheets["prospects"])
         fst_research.to_excel(xw, sheet_name="address-research", index=False)
