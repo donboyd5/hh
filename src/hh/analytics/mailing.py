@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import re
 
+import numpy as np
 import pandas as pd
 
 from ..analytics.donors import succeeded_individual_gifts
@@ -90,8 +91,8 @@ DON_FY_COLUMNS = [f"don_fy{fy}" for fy in GIVING_FYS]
 # column order in the exported table (Don, 2026-08-27): the three id codes, the
 # household name, donation history, contact info, then everything else
 OUTPUT_COLUMNS = [
-    # the three codes, then the household name
-    "neon_hh_id", "neon_account_ids", "new_code", "household_name",
+    # the three codes, then the household name and which letter it gets
+    "neon_hh_id", "neon_account_ids", "new_code", "household_name", "letter",
     # donation history
     *DON_FY_COLUMNS, "don_5yr_total", "don_lifetime", "don_appeal_window",
     # contact info
@@ -355,6 +356,31 @@ def fst_keep_mask(fst_summary: pd.DataFrame) -> pd.Series:
     return ((rank >= FST_KEEP_MIN_RANK) & ~angels_2020_only) | (n_years >= FST_KEEP_MIN_YEARS)
 
 
+# which letter template a household gets (Don, 2026-08-28). One mail merge branches on
+# this instead of hand-sorting the sheet; it stays right when the list is regenerated.
+LETTER_DONOR = "donor"  # has given in the last five years, or a hand-kept lapsed donor
+LETTER_CLASS_FAMILY = "class-family"  # engaged non-donor: paid for classes/tickets, never asked
+LETTER_NEW_ATTENDER = "new-attender"  # new Neon account, no gift yet
+LETTER_FST = "fst-personal"  # Fort Salem sponsor not in Neon: Don's personal letter, not the appeal
+
+
+def assign_letter(table: pd.DataFrame) -> pd.Series:
+    """Letter template per row, in the same priority order as the summary categories."""
+    return pd.Series(
+        np.select(
+            [
+                ~table["in_neon"].fillna(False).astype(bool),
+                table["don_5yr_total"].fillna(0) > 0,
+                table["src_engaged_nondonor"].fillna(False).astype(bool),
+                table["src_new_accounts"].fillna(False).astype(bool),
+            ],
+            [LETTER_FST, LETTER_DONOR, LETTER_CLASS_FAMILY, LETTER_NEW_ATTENDER],
+            default=LETTER_DONOR,  # the hand-kept lapsed donors
+        ),
+        index=table.index,
+    )
+
+
 def _new_codes(names: pd.Series) -> pd.Series:
     """``new1``, ``new2``, … assigned in name order (stable across reruns)."""
     order = sorted(range(len(names)), key=lambda i: str(names.iloc[i]))
@@ -555,6 +581,8 @@ def build_mailing_list(
 
     # -- exclusions (deceased; small donor-rule rows) -------------------------------
     table, exclusion_qa = apply_exclusions(table)
+
+    table["letter"] = assign_letter(table)
 
     # sort (Don, 2026-08-28): 2025-campaign gift, then 5-year giving, then class spending,
     # all descending; name breaks ties. Campaign gift counts only for appealed responders.

@@ -82,7 +82,9 @@ I think we should have a separate letter for the engaged non-donors as they are 
 The attached mailing-list workbook has one row per household with the giving history, contact
 information, engagement, and the reason each household is included. It is sorted by 2025
 campaign gift, then five-year giving, then class spending (all descending), so the top of
-the sheet is the top of the list.
+the sheet is the top of the list. A `letter` column says which letter each household gets
+(`donor`, `class-family`, `new-attender`; the Fort Salem people are marked `fst-personal` and
+are not part of the appeal merge), so one merge can branch on it.
 
 ## Fort Salem Theater supporters
 
