@@ -8,9 +8,9 @@ headers can span columns — it renders in the markdown preview and pastes into 
 
 Hi all,
 
-I'm attaching an initial cut at a mailing list for the fall 2026 campaign. I'm also attaching a separate spreadsheet of Fort Salem Theater supporters, not currently in neon, who appear to be good prospects for Hubbard Hall and for whom we have addresses. I would not include them in the fall appeal but suggest a separate letter to them inviting them to the HAall, or if you think better, direct personal outreach.
+I'm attaching an initial cut at a mailing list for the fall 2026 campaign. I'm also attaching a separate spreadsheet of Fort Salem Theater supporters, not currently in neon, who appear to be good prospects for Hubbard Hall and for whom we have addresses. I would not include them in the fall appeal but suggest a separate letter to them inviting them to the Hall, or if you think better, direct personal outreach.
 
-Comments welcome — this is a first pass; it is automated and easy to rerun.
+Comments welcome — this is a first pass; it is automated and easy to rerun. We can add more households if we want.
 
 Don
 
