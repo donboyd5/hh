@@ -31,8 +31,8 @@ Don
 <th>2025 campaign (Oct 1 – Jan 31)</th>
 <th>Rest of FY26</th>
 <th>Total</th>
-<th>Median 5-yr total per giving household</th>
-<th>Average 5-yr total per giving household</th>
+<th>Median 5-yr total per giving household†</th>
+<th>Average 5-yr total per giving household†</th>
 <th>Performances &amp; events</th>
 <th>Classes</th>
 </tr>
