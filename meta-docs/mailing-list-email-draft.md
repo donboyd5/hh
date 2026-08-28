@@ -1,7 +1,8 @@
 # Draft email — fall campaign mailing list (initial cut)
 
 *Draft for Don to edit and send. Numbers are from the 2026-08-27 Neon pull; regenerate with
-`scripts/export_mailing_list.py` if the data changes.*
+`scripts/export_mailing_list.py` if the data changes. The table is HTML so the period
+headers can span columns — it renders in the markdown preview and pastes into email.*
 
 ---
 
@@ -13,38 +14,60 @@ Comments welcome — this is a first pass and easy to rerun.
 
 ## Proposed mailing list for fall 2026 campaign
 
-| Kind of household | Households | Gifts to 2025 campaign (Oct–Jan) | Other FY26 gifts | Gifts FY22–26 | Median 5-yr gift† | Average 5-yr gift† | Performance/event spend FY22–26 | Class spend FY22–26 |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Top 30 households by 2025-campaign gift | 30 | $23,091 | $8,019 | $117,824 | $2,501 | $3,927 | $28,405 | $4,659 |
-| All other households that gave to the 2025 campaign ($10+) | 95 | $8,543 | $3,707 | $45,380 | $275 | $478 | $28,065 | $21,305 |
-| Did not give to the campaign; gave $200+ over five years‡ | 88 | — | $34,579 | $171,101 | $370 | $1,944 | $43,385 | $37,602 |
-| Did not give to the campaign; under $200 over five years, kept for a reason* | 20 | — | $486 | $1,532 | $80 | $77 | $4,895 | $4,149 |
-| Engaged non-donors: $500+ spent on classes/events FY22–26, no gift FY22–26 | 93 | — | — | — | — | — | $4,995 | $118,450 |
-| New accounts, FY25–26 ($100+ in registrations, no gift yet) | 67 | — | — | — | — | — | $5,630 | $3,012 |
-| Lapsed larger donors, kept by hand | 3 | — | — | — | — | — | $250 | $40 |
-| **Total** | **396** | **$31,633** | **$46,792** | **$335,837** | **$350** | **$1,441** | **$115,625** | **$189,216** |
+<table>
+<thead>
+<tr>
+<th rowspan="2" align="left">Kind of household</th>
+<th rowspan="2">Households</th>
+<th colspan="2">Gifts in FY26 (July 2025 – June 2026)</th>
+<th colspan="3">Gifts over five years, FY22–26 (July 2021 – June 2026)</th>
+<th colspan="2">Spending on tickets and classes, FY22–26</th>
+</tr>
+<tr>
+<th>2025 campaign (Oct 1 – Jan 31)</th>
+<th>Rest of FY26</th>
+<th>Total</th>
+<th>Median 5-yr total per giving household</th>
+<th>Average 5-yr total per giving household</th>
+<th>Performances &amp; events</th>
+<th>Classes</th>
+</tr>
+</thead>
+<tbody>
+<tr><td>Top 30 households by 2025-campaign gift</td><td align="right">30</td><td align="right">$23,091</td><td align="right">$8,019</td><td align="right">$117,824</td><td align="right">$2,501</td><td align="right">$3,927</td><td align="right">$28,405</td><td align="right">$4,659</td></tr>
+<tr><td>All other households that gave $10+ to the 2025 campaign</td><td align="right">95</td><td align="right">$8,543</td><td align="right">$3,707</td><td align="right">$45,380</td><td align="right">$275</td><td align="right">$478</td><td align="right">$28,065</td><td align="right">$21,305</td></tr>
+<tr><td>No campaign gift, but gave $200+ over five years‡</td><td align="right">88</td><td align="right">—</td><td align="right">$34,579</td><td align="right">$171,101</td><td align="right">$370</td><td align="right">$1,944</td><td align="right">$43,385</td><td align="right">$37,602</td></tr>
+<tr><td>No campaign gift, gave under $200 over five years, kept for a specific reason*</td><td align="right">20</td><td align="right">—</td><td align="right">$486</td><td align="right">$1,532</td><td align="right">$80</td><td align="right">$77</td><td align="right">$4,895</td><td align="right">$4,149</td></tr>
+<tr><td>Engaged non-donors: no gift in five years, but spent $500+ on classes or tickets over the same five years</td><td align="right">93</td><td align="right">—</td><td align="right">—</td><td align="right">—</td><td align="right">—</td><td align="right">—</td><td align="right">$4,995</td><td align="right">$118,450</td></tr>
+<tr><td>New accounts opened in FY25–26 with $100+ of registrations since opening, no gift yet</td><td align="right">67</td><td align="right">—</td><td align="right">—</td><td align="right">—</td><td align="right">—</td><td align="right">—</td><td align="right">$5,630</td><td align="right">$3,012</td></tr>
+<tr><td>Lapsed larger donors (nothing since FY21), kept by hand for follow-up</td><td align="right">3</td><td align="right">—</td><td align="right">—</td><td align="right">—</td><td align="right">—</td><td align="right">—</td><td align="right">$250</td><td align="right">$40</td></tr>
+<tr><td><b>Total</b></td><td align="right"><b>396</b></td><td align="right"><b>$31,633</b></td><td align="right"><b>$46,792</b></td><td align="right"><b>$335,837</b></td><td align="right"><b>$350</b></td><td align="right"><b>$1,441</b></td><td align="right"><b>$115,625</b></td><td align="right"><b>$189,216</b></td></tr>
+</tbody>
+</table>
 
 "Gave to the 2025 campaign" = received last fall's appeal and gave $10 or more between
 October 1, 2025 and January 31, 2026. The top 30 start at a $250 campaign gift and account
-for 73% of campaign dollars.
-† Median and average are per donor household over the five fiscal years FY22–FY26 (July 2021 – June 2026).
-‡ 42 of these 88 gave during FY26 at other times of the year, and 73 were mailed the appeal.
+for 73% of campaign dollars. Median and average are five-year *totals* per household, among
+households that gave in the period (divide by five for a per-year figure).
+‡ 42 of these 88 gave during FY26 outside the campaign window, and 73 were mailed the appeal.
 \* Kept because they also support Fort Salem (11), have a steward assigned (6), are on my
 keep list (3), or have a note (1); some qualify on more than one count. The three lapsed
-larger donors are $1,200–$8,900 lifetime givers with nothing since FY21 whom I've kept for
-follow-up.
+larger donors are $1,200–$8,900 lifetime givers whom I've kept for follow-up.
 
 A few notes on how the list was built:
 
 - **Fiscal years** run July–June and are labeled by the ending year, matching Judy's reports.
 - **Who's in**: anyone who gave $200 or more over the last five years; donors under $200 only
   if there's a specific reason to keep them (above); households that have not given in five
-  years but spent $500+ on classes or events over the same five years; and new Neon accounts
+  years but spent $500+ on classes or tickets over the same five years; and new Neon accounts
   from the last two years with at least $100 of registrations. Everything comes from Neon
   except my keep list and steward notes.
 - **Who's out**: deceased households (Neon's flag plus what we know), and small or inactive
-  accounts. Do-not-contact households are *flagged* in the file but not removed (16 of them
-  — please pull them before the merge).
+  accounts.
+- **Do-not-contact**: Neon's do-not-contact flag is set on 422 households, including several
+  of our largest donors, so it can't mean "never contact." I've left those households in and
+  flagged them (16 on this list, on their own sheet). Judy — can you tell us what that flag
+  means in practice (email opt-out? an old import?) so we handle it right?
 - The 93 **engaged non-donors** are worth a look: they're mostly families spending $500–$4,000
   on classes with no giving history (80 of the 93 have never given anything; 82 registered
   for something in the last two years). Only 11 of them received last year's appeal, so for
@@ -57,7 +80,9 @@ I think we should have a separate letter for the engaged non-donors as they are 
   - Maybe have it signed by Dan or Moe -- someone parents are familiar with?
 
 The attached mailing-list workbook has one row per household with the giving history, contact
-information, engagement, and the reason each household is included.
+information, engagement, and the reason each household is included. It is sorted by 2025
+campaign gift, then five-year giving, then class spending (all descending), so the top of
+the sheet is the top of the list.
 
 ## Fort Salem Theater supporters
 

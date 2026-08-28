@@ -264,6 +264,7 @@ def main() -> None:
     # (scripts/research_fst_contacts.py) and web notes; web-confirmed deaths drop
     table, fst_research = _fold_fst_contacts(table)
 
+    qa = table.attrs.get("exclusion_qa", {})
     io.write_parquet(table, "processed", "mailing_list.parquet")
     io.write_parquet(fst_review, "processed", "fst_candidates.parquet")
     xlsx_path = config.layer_dir("processed") / XLSX_FILENAME
@@ -272,6 +273,9 @@ def main() -> None:
         fst_review.to_excel(xw, sheet_name="fst-candidates", index=False)
         fst_research.to_excel(xw, sheet_name="fst-contact-research", index=False)
         _freeze_header(xw.sheets["fst-contact-research"])
+        pd.DataFrame({"household_name": qa.get("do_not_contact", [])}).to_excel(
+            xw, sheet_name="do-not-contact", index=False
+        )
         fst_dropped = pd.DataFrame(table.attrs.get("fst_dropped", []))
         fst_dropped.to_excel(xw, sheet_name="fst-dropped", index=False)
         _freeze_header(xw.sheets["fst-dropped"])
@@ -285,7 +289,7 @@ def main() -> None:
                     "src_silent_selected", "src_appeal_responded",
                     "src_appeal_gift (>= $10 in Oct 2025-Jan 2026)",
                     "src_engaged_nondonor (>= $500 FY22-26 spend, no gift)", "fst flagged",
-                    "do_not_contact", "deceased",
+                    "do_not_contact (flagged, kept; see sheet)", "deceased",
                 ],
                 "detail": [
                     len(table),
@@ -299,7 +303,7 @@ def main() -> None:
                     int(table["src_appeal_gift"].sum()),
                     int(table["src_engaged_nondonor"].sum()),
                     int(table["fst"].sum()),
-                    int(table["do_not_contact"].fillna(False).sum()),
+                    len(qa.get("do_not_contact", [])),
                     int(table["deceased"].fillna(False).sum()),
                 ],
             }
@@ -350,7 +354,8 @@ def main() -> None:
         f"({int(table['in_neon'].sum())} in Neon, {int(table['needs_review'].sum())} FST new)"
     )
     print(
-        f"exclusions: {len(qa.get('dropped_deceased_neon', []))} deceased (Neon flag), "
+        f"exclusions: {len(qa.get('do_not_contact', []))} do-not-contact FLAGGED (kept; see sheet), "
+        f"{len(qa.get('dropped_deceased_neon', []))} deceased (Neon flag), "
         f"{len(qa.get('dropped_deceased_note', []))} deceased (notes), "
         f"{len(qa.get('dropped_small_donor', []))} rows under $200 not keep-identified"
     )
