@@ -44,7 +44,8 @@ def main() -> None:
     )
     print(f"harvested {len(marks)} marked rows from {workbook.name} -> {dest}")
     print(f"decisions on file: {len(decisions)} "
-          f"(Y={int((decisions['confirm'] == 'Y').sum())}, N={int((decisions['confirm'] == 'N').sum())})")
+          f"(Y={int((decisions['confirm'] == 'Y').sum())}, "
+          f"N={int((decisions['confirm'] == 'N').sum())})")
     for c in changes:
         print("  changed:", c)
 

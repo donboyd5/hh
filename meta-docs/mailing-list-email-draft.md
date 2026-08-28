@@ -79,15 +79,14 @@ A few notes on how the list was built:
 I think we should have a separate letter for the engaged non-donors as they are so different from the other households on the list:
   - It might discuss the youth program including, possibly, the teacher, the show their kid was in, and the performance.
   - We'd say tuition does not cover full costs we subsidize to keep affordable -- Judy, can we discuss this?; I don't know how much of the variable cost is covered by tuition; beyond that, we keep buildings open, maintain them fix them, etc.
-  - We'd do an ask for a modest gift and perhaps say "you've never been asked."
+  - We'd do an ask for a modest gift and perhaps say "we've never asked you directly."
   - Maybe have it signed by Dan or Moe -- someone parents are familiar with?
 
 The attached mailing-list workbook has one row per household with the giving history, contact
 information, engagement, and the reason each household is included. It is sorted by 2025
 campaign gift, then five-year giving, then class spending (all descending), so the top of
-the sheet is the top of the list. A `letter` column says which letter each household gets
-(`donor`, `class-family`, `new-attender`; the Fort Salem people are marked `fst-personal` and
-are not part of the appeal merge), so one merge can branch on it.
+the sheet is the top of the list. A "letter" column says which letter each household gets
+("donor", "class-family", or "new-attender"), so one merge can branch on it.
 
 ## Fort Salem Theater supporters
 
@@ -95,7 +94,7 @@ Separately, I went through Fort Salem Theater's published sponsor lists (2020–
 source of new prospects — people who already give to the arts a few miles from us. Their
 individual sponsors sort into three groups:
 
-- **Already in Neon: about 100 households.** These are our people too; many are on the list
+- **Already in Neon: 104 households.** These are our people too; many are on the list
   above. Judy — the attached Fort Salem spreadsheet has their Neon ids, sponsor years, and
   levels so we can add an "FST donor" field and see the overlap going forward.
 - **Not in Neon but serious supporters: 75 people** — Inner Circle ($100+) or higher in some

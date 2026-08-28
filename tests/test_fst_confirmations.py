@@ -35,7 +35,9 @@ def test_merge_and_roundtrip_reports_changes(tmp_path):
     p = tmp_path / "wb.xlsx"
     _review_xlsx(p)
     marks = read_review_marks(p)
-    first, changes = merge_decisions(load_confirmations(tmp_path / "none.yaml"), marks, today="2026-08-27")
+    first, changes = merge_decisions(
+        load_confirmations(tmp_path / "none.yaml"), marks, today="2026-08-27"
+    )
     assert changes == [] and first["decided"].eq("2026-08-27").all()
     yaml_path = write_confirmations(first, tmp_path / "c.yaml")
     reloaded = load_confirmations(yaml_path)
@@ -44,7 +46,8 @@ def test_merge_and_roundtrip_reports_changes(tmp_path):
     marks.loc[1, "confirm"] = "Y"
     second, changes = merge_decisions(reloaded, marks, today="2026-09-01")
     assert changes == ["Kyle & Jared West -> H9: N -> Y"]
-    assert second.set_index(["fst_name", "neon_hh_id"]).loc[("Kyle & Jared West", "H1"), "decided"] == "2026-08-27"
+    keyed = second.set_index(["fst_name", "neon_hh_id"])
+    assert keyed.loc[("Kyle & Jared West", "H1"), "decided"] == "2026-08-27"
 
 
 def test_resolve_conflicts_vs_duplicate_records():

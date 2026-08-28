@@ -93,8 +93,10 @@ def merge_decisions(existing: pd.DataFrame, marks: pd.DataFrame, *, today: str |
     for m in marks.itertuples(index=False):
         k = (m.fst_name, m.neon_hh_id)
         prior = ex.loc[k] if len(existing) and k in ex.index else None
-        confirm = m.confirm if pd.notna(m.confirm) else (prior["confirm"] if prior is not None else "")
-        note = m.boyd_note if pd.notna(m.boyd_note) else (prior["boyd_note"] if prior is not None else None)
+        prior_confirm = prior["confirm"] if prior is not None else ""
+        prior_note = prior["boyd_note"] if prior is not None else None
+        confirm = m.confirm if pd.notna(m.confirm) else prior_confirm
+        note = m.boyd_note if pd.notna(m.boyd_note) else prior_note
         decided = prior["decided"] if prior is not None and prior["confirm"] == confirm else today
         if prior is not None and prior["confirm"] != confirm and confirm:
             changes.append(f"{m.fst_name} -> {m.neon_hh_id}: {prior['confirm']} -> {confirm}")

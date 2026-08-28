@@ -35,6 +35,7 @@ from hh.external.notes import load_boyd_notes, load_fst_contact_notes, load_fst_
 from hh.external.provenance import append_external_manifest, external_source_entry
 
 XLSX_FILENAME = "hh-mailing-list.xlsx"
+SHARE_FILENAME = "hh-mailing-list-share.xlsx"  # colleague version: no research/review sheets
 JUDY_FILENAME = "fst-donors-in-neon.xlsx"
 
 # Hand-maintained aliases for workbook names that no longer match Neon exactly (Neon
@@ -123,7 +124,10 @@ def _fold_fst_contacts(table: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]
 
     best = hits.drop_duplicates("household_name").set_index("household_name")
     fst = table["needs_review"]
-    field_map = [("address", "street"), ("city", "city"), ("state_province", "state"), ("zip_code", "zip")]
+    field_map = [
+        ("address", "street"), ("city", "city"), ("state_province", "state"),
+        ("zip_code", "zip"),
+    ]
     for col, src in field_map:
         table.loc[fst, col] = table.loc[fst, "household_name"].map(best[src])
     table["address_source"] = pd.NA
@@ -138,7 +142,8 @@ def _fold_fst_contacts(table: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]
     research = table.loc[fst, ["household_name", "fst_best_tier", "fst_years_list"]].merge(
         hits, on="household_name", how="left"
     ).merge(notes.drop(columns=["deceased", "survivor"]), on="household_name", how="left")
-    return table, research.sort_values(["household_name", "given_agreement"], ascending=[True, False])
+    research = research.sort_values(["household_name", "given_agreement"], ascending=[True, False])
+    return table, research
 
 
 def main() -> None:
@@ -235,7 +240,8 @@ def main() -> None:
         .rename(columns={"id": "neon_hh_id"})
     )
     judy = judy.merge(
-        table[["neon_hh_id", "neon_account_ids", "household_name", "city"]], on="neon_hh_id", how="left"
+        table[["neon_hh_id", "neon_account_ids", "household_name", "city"]],
+        on="neon_hh_id", how="left",
     )
     missing_hh = judy["household_name"].isna()  # households not in the mailing list
     judy.loc[missing_hh, "household_name"] = judy.loc[missing_hh, "neon_hh_id"].map(
@@ -281,7 +287,7 @@ def main() -> None:
         _freeze_header(xw.sheets["fst-dropped"])
         _format_review_sheet(xw.sheets["fst-candidates"], n_rows=len(fst_review))
         _freeze_header(xw.sheets["mailing-list"])
-        pd.DataFrame(
+        about = pd.DataFrame(
             {
                 "item": [
                     "rows", "in_neon", "needs_review (Fort Salem, not in Neon)",
@@ -313,7 +319,23 @@ def main() -> None:
                     int(table["deceased"].fillna(False).sum()),
                 ],
             }
-        ).to_excel(xw, sheet_name="about", index=False)
+        )
+        about.to_excel(xw, sheet_name="about", index=False)
+
+    # colleague version: the appeal rows only (Fort Salem people get Don's personal
+    # letters), the do-not-contact list, and the about sheet. The research and review
+    # sheets (Don's marks, assessment-roll owners, web findings) stay internal.
+    share = table[table["letter"].ne("fst-personal")].drop(
+        columns=["fst_candidate_id", "fst_candidate_name", "contact_note", "address_source"],
+        errors="ignore",
+    )
+    with pd.ExcelWriter(config.layer_dir("processed") / SHARE_FILENAME, engine="openpyxl") as xw:
+        share.to_excel(xw, sheet_name="mailing-list", index=False)
+        _freeze_header(xw.sheets["mailing-list"])
+        pd.DataFrame({"household_name": qa.get("do_not_contact", [])}).to_excel(
+            xw, sheet_name="do-not-contact", index=False
+        )
+        about.to_excel(xw, sheet_name="about", index=False)
 
     # provenance: one entry per distinct file version of each hand-maintained source
     for filename, note in [
@@ -360,7 +382,7 @@ def main() -> None:
         f"({int(table['in_neon'].sum())} in Neon, {int(table['needs_review'].sum())} FST new)"
     )
     print(
-        f"exclusions: {len(qa.get('do_not_contact', []))} do-not-contact FLAGGED (kept; see sheet), "
+        f"exclusions: {len(qa.get('do_not_contact', []))} do-not-contact flagged (kept), "
         f"{len(qa.get('dropped_deceased_neon', []))} deceased (Neon flag), "
         f"{len(qa.get('dropped_deceased_note', []))} deceased (notes), "
         f"{len(qa.get('dropped_small_donor', []))} rows under $200 not keep-identified"
@@ -372,7 +394,7 @@ def main() -> None:
     for source, names in unmatched.items():
         if names:
             print(f"  UNMATCHED {source} ({len(names)}): {names[:8]}")
-    print(f"saved: data/20_processed/mailing_list.parquet and {XLSX_FILENAME}")
+    print(f"saved: mailing_list.parquet, {XLSX_FILENAME}, {SHARE_FILENAME} (colleagues)")
 
 
 if __name__ == "__main__":

@@ -206,6 +206,18 @@ _CONTACT_FIELDS = {
 }
 
 
+def _any_living_flag(flags: pd.Series, members: pd.DataFrame) -> bool:
+    """True if any LIVING member of the group carries the flag."""
+    return bool((flags.fillna(False).astype(bool) & ~members.loc[flags.index, "_dead"]).any())
+
+
+def _deceased_names(names: pd.Series, members: pd.DataFrame) -> str | None:
+    """"; "-joined names of the group's deceased members, or None."""
+    dead = members.loc[names.index, "_dead"]
+    joined = "; ".join(str(n) for n, d in zip(names, dead, strict=True) if d)
+    return joined or None
+
+
 def pick_contact(accounts: pd.DataFrame, donations: pd.DataFrame) -> pd.DataFrame:
     """One contact row per household rollup id (most lifetime gifts, earliest created first).
 
@@ -237,8 +249,8 @@ def pick_contact(accounts: pd.DataFrame, donations: pd.DataFrame) -> pd.DataFram
     #   deceased_members = names of the deceased, so a letter can avoid the late spouse
     flags = a.groupby("id", sort=True).agg(
         deceased=("_dead", "all"),
-        do_not_contact=("do_not_contact", lambda s: bool((s.fillna(False).astype(bool) & ~a.loc[s.index, "_dead"]).any())),
-        deceased_members=("full_name", lambda s: "; ".join(str(n) for n, d in zip(s, a.loc[s.index, "_dead"], strict=True) if d) or None),
+        do_not_contact=("do_not_contact", lambda s: _any_living_flag(s, a)),
+        deceased_members=("full_name", lambda s: _deceased_names(s, a)),
     ).reset_index()
     contact = contact.merge(flags, on="id")
 
@@ -306,7 +318,8 @@ def apply_exclusions(
       keep-identified — a new person (Judy's new-accounts list, or Fort Salem), one of
       Don's hand notes or a steward assignment, the bolded silent keep-list, an appeal
       responder, a household that gave >= $10 in last year's campaign window, or an
-      engaged non-donor (>= $500 FY22-26 spending, no 5-year gift) (Don, 2026-08-27/28). Neon staff notes do not identify a keeper, consistent
+      engaged non-donor (>= $500 FY22-26 spending, no 5-year gift) (Don, 2026-08-27/28).
+      Neon staff notes do not identify a keeper, consistent
       with the deceased scan.
 
     QA names every dropped household and why, so nothing disappears silently.
@@ -335,7 +348,8 @@ def apply_exclusions(
 
     qa = {
         "do_not_contact": table.loc[
-            table["do_not_contact"].fillna(False).astype(bool) & ~deceased & ~small, "household_name"
+            table["do_not_contact"].fillna(False).astype(bool) & ~deceased & ~small,
+            "household_name",
         ].tolist(),
         "dropped_do_not_contact": table.loc[dnc & ~deceased, "household_name"].tolist(),
         "dropped_deceased_neon": table.loc[
@@ -368,7 +382,7 @@ def fst_keep_mask(fst_summary: pd.DataFrame) -> pd.Series:
     tier = fst_summary["best_tier"].astype(str).str.strip().str.lower()
     rank = tier.map(FST_TIER_RANK).fillna(0)
     years = fst_summary["years"].astype(str).str.split(",")
-    last_year = years.map(lambda l: max((int(y) for y in l if y.strip().isdigit()), default=0))
+    last_year = years.map(lambda ys: max((int(y) for y in ys if y.strip().isdigit()), default=0))
     n_years = pd.to_numeric(fst_summary["n_years"], errors="coerce").fillna(0)
     angels_2020_only = tier.eq("opening angels") & last_year.eq(2020)
     return ((rank >= FST_KEEP_MIN_RANK) & ~angels_2020_only) | (n_years >= FST_KEEP_MIN_YEARS)
@@ -476,7 +490,8 @@ def build_mailing_list(
     fst_neon = fst_summary[in_neon_flag]
     fst_not_neon = fst_summary[~in_neon_flag]
     keep = fst_keep_mask(fst_not_neon)
-    fst_dropped = fst_not_neon[~keep][["name", "best_tier", "n_years", "years"]].reset_index(drop=True)
+    fst_dropped = fst_not_neon.loc[~keep, ["name", "best_tier", "n_years", "years"]]
+    fst_dropped = fst_dropped.reset_index(drop=True)
     fst_new = fst_not_neon[keep].copy()
     fst_new = fst_new.rename(
         columns={
@@ -509,7 +524,9 @@ def build_mailing_list(
         fst_neon[["id", "n_years", "years", "best_tier"]]
         .drop_duplicates(subset=["id"])
         .rename(
-            columns={"n_years": "fst_years", "years": "fst_years_list", "best_tier": "fst_best_tier"}
+            columns={
+                "n_years": "fst_years", "years": "fst_years_list", "best_tier": "fst_best_tier",
+            }
         ),
         on="id", how="left",
     )
@@ -606,9 +623,12 @@ def build_mailing_list(
     table["neon_household_name"] = table["household_name"]
     survivor = table["deceased_members"].notna() & ~table["deceased"].fillna(False).astype(bool)
     living_name = (
-        table["contact_first_name"].fillna("").astype(str) + " " + table["contact_last_name"].fillna("").astype(str)
+        table["contact_first_name"].fillna("").astype(str)
+        + " "
+        + table["contact_last_name"].fillna("").astype(str)
     ).str.strip()
-    table.loc[survivor & living_name.ne(""), "household_name"] = living_name[survivor & living_name.ne("")]
+    relabel = survivor & living_name.ne("")
+    table.loc[relabel, "household_name"] = living_name[relabel]
 
     table["letter"] = assign_letter(table)
 
@@ -625,7 +645,9 @@ def build_mailing_list(
         # a name are legitimate — duplicate person records in Neon, e.g. Krauss — and
         # surface in the export QA instead.)
         dups = table.loc[table.duplicated(subset=["household_name", "id"]), "household_name"]
-        raise ValueError(f"duplicated households in mailing list (merge explosion?): {list(dups.head())}")
+        raise ValueError(
+            f"duplicated households in mailing list (merge explosion?): {list(dups.head())}"
+        )
 
     # output-facing names: the join key becomes the household id code, and the member
     # account ids read as what they are (internal callers still use id / neon_ids)

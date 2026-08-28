@@ -352,7 +352,9 @@ def test_build_mailing_list_end_to_end():
 def test_fst_keep_mask_rule_b():
     fst = pd.DataFrame(
         {
-            "name": ["Friend Once", "Friend Twice", "Inner Once", "Angel 2020", "Angel Back", "Gold"],
+            "name": [
+                "Friend Once", "Friend Twice", "Inner Once", "Angel 2020", "Angel Back", "Gold",
+            ],
             "best_tier": ["friends of fort salem", "friends of fort salem", "inner circle",
                           "opening angels", "opening angels", "gold"],
             "n_years": [1, 2, 1, 1, 2, 1],
@@ -368,4 +370,5 @@ def test_appeal_window_gifts_counts_only_campaign_coded_gifts():
     d = _donations()
     d.loc[2, "campaign"] = "Misc Donation"  # H2's $500 in the window, not campaign-coded
     assert appeal_window_gifts(d).empty
-    assert appeal_window_gifts(d, campaign=None).set_index("id").loc["H2", "don_appeal_window"] == 500.0
+    any_code = appeal_window_gifts(d, campaign=None).set_index("id")
+    assert any_code.loc["H2", "don_appeal_window"] == 500.0
