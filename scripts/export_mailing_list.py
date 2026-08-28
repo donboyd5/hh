@@ -72,6 +72,46 @@ def _union_years(values) -> str:
     return ",".join(sorted({y for v in values for y in str(v).split(",") if y}))
 
 
+# share-workbook column order (Don, 2026-08-28): id, steward, the name Judy mails to, the
+# letter, then giving, contact info, and everything else; Neon's own household label and the
+# steward detail go far right. new_code (no Fort Salem rows here) and neon_account_ids
+# (Judy can look members up by household id) are dropped.
+_SHARE_LEFT = ["neon_hh_id", "steward", "household_name", "letter"]
+_SHARE_DROP = {"new_code", "neon_account_ids", "fst_candidate_id", "fst_candidate_name",
+               "contact_note", "address_source"}
+_SHARE_RIGHT = ["steward_detail", "neon_household_name"]
+
+_DOLLAR_PREFIXES = ("don_", "arts_spend", "classes_spend", "community_spend")
+
+
+def _share_layout(df: pd.DataFrame) -> pd.DataFrame:
+    """Reorder/drop columns for the colleague workbook (see the constants above)."""
+    cols = [c for c in df.columns if c not in _SHARE_DROP]
+    middle = [c for c in cols if c not in _SHARE_LEFT and c not in _SHARE_RIGHT]
+    left = [c for c in _SHARE_LEFT if c in cols]
+    right = [c for c in _SHARE_RIGHT if c in cols]
+    return df[left + middle + right]
+
+
+def _format_list_sheet(ws, df: pd.DataFrame) -> None:
+    """Readable mailing-list sheet: frozen bold header, dollars as #,##0 (values keep full
+    precision), name/steward/address columns wide enough to read."""
+    _freeze_header(ws)
+    for j, cell in enumerate(ws[1], start=1):
+        name, letter = cell.value, cell.column_letter
+        if not isinstance(name, str):
+            continue
+        if name.startswith(_DOLLAR_PREFIXES):
+            for r in range(2, ws.max_row + 1):
+                ws.cell(row=r, column=j).number_format = "#,##0"
+            ws.column_dimensions[letter].width = 12
+        elif name in ("household_name", "neon_household_name", "address", "email"):
+            longest = int(df[name].astype("string").str.len().max() or 10) if name in df else 20
+            ws.column_dimensions[letter].width = min(max(longest + 2, 18), 48)
+        elif name in ("steward", "letter", "city", "salutation"):
+            ws.column_dimensions[letter].width = 14
+
+
 def _freeze_header(ws) -> None:
     ws.freeze_panes = "A2"
     for cell in ws[1]:
@@ -287,7 +327,7 @@ def main() -> None:
         fst_dropped.to_excel(xw, sheet_name="fst-dropped", index=False)
         _freeze_header(xw.sheets["fst-dropped"])
         _format_review_sheet(xw.sheets["fst-candidates"], n_rows=len(fst_review))
-        _freeze_header(xw.sheets["mailing-list"])
+        _format_list_sheet(xw.sheets["mailing-list"], table)
         about = pd.DataFrame(
             {
                 "item": [
@@ -326,13 +366,10 @@ def main() -> None:
     # colleague version: the appeal rows only (Fort Salem people get Don's personal
     # letters), the do-not-contact list, and the about sheet. The research and review
     # sheets (Don's marks, assessment-roll owners, web findings) stay internal.
-    share = table[table["letter"].ne("fst-personal")].drop(
-        columns=["fst_candidate_id", "fst_candidate_name", "contact_note", "address_source"],
-        errors="ignore",
-    )
+    share = _share_layout(table[table["letter"].ne("fst-personal")])
     with pd.ExcelWriter(config.layer_dir("processed") / SHARE_FILENAME, engine="openpyxl") as xw:
         share.to_excel(xw, sheet_name="mailing-list", index=False)
-        _freeze_header(xw.sheets["mailing-list"])
+        _format_list_sheet(xw.sheets["mailing-list"], share)
         pd.DataFrame({"household_name": qa.get("do_not_contact", [])}).to_excel(
             xw, sheet_name="do-not-contact", index=False
         )
