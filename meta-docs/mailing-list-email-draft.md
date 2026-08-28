@@ -8,7 +8,7 @@ headers can span columns — it renders in the markdown preview and pastes into 
 
 Hi all,
 
-I'm attaching an initial cut at a mailing list for the fall 2026 campaign. I'm also attaching a separate spreadsheet related to Fort Salem Theater.
+I'm attaching an initial cut at a mailing list for the fall 2026 campaign. I'm also attaching a separate spreadsheet of Fort Salem Theater supporters, not currently in neon, who appear to be good prospects for Hubbard Hall and for whom we have addresses. I would not include them in the fall appeal but suggest a separate letter to them inviting them to the HAall, or if you think better, direct personal outreach.
 
 Comments welcome — this is a first pass; it is automated and easy to rerun.
 
@@ -68,8 +68,8 @@ A few notes on how the list was built:
 - **Deceased and surviving spouses**: a household is dropped only when everyone in it has
   died; where one spouse has died the household stays, addressed to the survivor (17 such
   households are on the list, e.g. Linda Slack, who gave $4,000 to last year's campaign).
-- **Do-not-contact**: Neon's do-not-contact flag is set on nearly 400 living people across
-  378 households, including several of our largest donors. I've left those households in and flagged them (18 on this list, on their own
+- **Do-not-contact**: Neon's do-not-contact flag is set on about 300 living individuals in
+  280 households (and about 100 company accounts), including several of our largest donors. I've left those households in and flagged them (18 on this list, on their own
   sheet). Judy — could you remind us what that flag means (email opt-out?) so that we handle it properly?
 - The 94 **engaged non-donors** are worth a look: they're mostly families spending $500–$4,000
   on classes with no giving history (81 of the 94 have never given anything; 83 registered
