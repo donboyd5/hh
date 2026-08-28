@@ -37,6 +37,7 @@ from hh.external.provenance import append_external_manifest, external_source_ent
 XLSX_FILENAME = "hh-mailing-list.xlsx"
 SHARE_FILENAME = "hh-mailing-list-share.xlsx"  # colleague version: no research/review sheets
 PROSPECTS_FILENAME = "fst-prospects-not-in-neon.xlsx"  # Fort Salem sponsors with no Neon account
+PROSPECTS_SHARE_FILENAME = "fst-prospects-not-in-neon_share.xlsx"  # colleagues: the addressed 32
 JUDY_FILENAME = "fst-donors-in-neon.xlsx"
 
 # Hand-maintained aliases for workbook names that no longer match Neon exactly (Neon
@@ -398,6 +399,23 @@ def main() -> None:
         ).to_excel(xw, sheet_name="dropped-below-rule-B", index=False)
         _freeze_header(xw.sheets["dropped-below-rule-B"])
 
+    # colleague version of the prospects (Don, 2026-08-28): only the people we have an
+    # address for, plain who/where columns, one sheet. address_source stays so a doubtful
+    # address can be judged; the web notes and fuzzy-match column do not.
+    share_cols = ["household_name", "fst_best_tier", "years_sponsored", "years", "address",
+                  "city", "state_province", "zip_code", "address_source"]
+    prospects_share = prospects.loc[prospects["address"].notna(), share_cols]
+    share_path = config.layer_dir("processed") / PROSPECTS_SHARE_FILENAME
+    with pd.ExcelWriter(share_path, engine="openpyxl") as xw:
+        prospects_share.to_excel(xw, sheet_name="prospects_fst_supporters", index=False)
+        ws = xw.sheets["prospects_fst_supporters"]
+        _freeze_header(ws)
+        for cell in ws[1]:
+            width = {"household_name": 34, "fst_best_tier": 18, "address": 28, "city": 16,
+                     "address_source": 60}.get(cell.value)
+            if width:
+                ws.column_dimensions[cell.column_letter].width = width
+
     # provenance: one entry per distinct file version of each hand-maintained source
     for filename, note in [
         (ml.DONOR3_FILENAME, "Judy's FY24-FY26 donor export with Don's Ambassador/notes"),
@@ -456,7 +474,8 @@ def main() -> None:
         if names:
             print(f"  UNMATCHED {source} ({len(names)}): {names[:8]}")
     print(f"saved: mailing_list.parquet, {XLSX_FILENAME}, {SHARE_FILENAME} (colleagues), "
-          f"{PROSPECTS_FILENAME} (Fort Salem not in Neon)")
+          f"{PROSPECTS_FILENAME} (Fort Salem not in Neon), "
+          f"{PROSPECTS_SHARE_FILENAME} (the addressed {len(prospects_share)}, for colleagues)")
 
 
 if __name__ == "__main__":
