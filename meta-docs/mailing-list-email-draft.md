@@ -42,7 +42,7 @@ Comments welcome — this is a first pass; it is automated and easy to rerun.
 <tr><td>No campaign gift, gave under $200 over five years, kept for a specific reason*</td><td align="right">23</td><td align="right">—</td><td align="right">$680</td><td style="border:none"></td><td align="right">$2,008</td><td align="right">$96</td><td align="right">$87</td><td style="border:none"></td><td align="right">$7,790</td><td align="right">$7,343</td></tr>
 <tr><td>Engaged non-donors: no gift in five years, but spent $500+ on classes or tickets over the same five years</td><td align="right">94</td><td align="right">—</td><td align="right">—</td><td style="border:none"></td><td align="right">—</td><td align="right">—</td><td align="right">—</td><td style="border:none"></td><td align="right">$5,335</td><td align="right">$118,934</td></tr>
 <tr><td>New accounts opened in FY25–26 with $100+ of registrations since opening, no gift yet</td><td align="right">67</td><td align="right">—</td><td align="right">—</td><td style="border:none"></td><td align="right">—</td><td align="right">—</td><td align="right">—</td><td style="border:none"></td><td align="right">$5,630</td><td align="right">$3,012</td></tr>
-<tr><td>Lapsed larger donors (nothing since FY21), kept by hand for follow-up</td><td align="right">4</td><td align="right">—</td><td align="right">—</td><td style="border:none"></td><td align="right">—</td><td align="right">—</td><td align="right">—</td><td style="border:none"></td><td align="right">$250</td><td align="right">$40</td></tr>
+<tr><td>Selected lapsed donors (nothing since FY21), kept from my list for follow-up</td><td align="right">4</td><td align="right">—</td><td align="right">—</td><td style="border:none"></td><td align="right">—</td><td align="right">—</td><td align="right">—</td><td style="border:none"></td><td align="right">$250</td><td align="right">$40</td></tr>
 <tr><td><b>Total</b></td><td align="right"><b>407</b></td><td align="right"><b>$34,463</b></td><td align="right"><b>$48,992</b></td><td style="border:none"></td><td align="right"><b>$356,178</b></td><td align="right"><b>$354</b></td><td align="right"><b>$1,472</b></td><td style="border:none"></td><td align="right"><b>$117,800</b></td><td align="right"><b>$178,804</b></td></tr>
 </tbody>
 </table>
@@ -54,8 +54,9 @@ start at a $250 campaign gift and account for 77% of campaign dollars. Median an
 households that gave in the period (divide by five for a per-year figure).
 ‡ 54 of these 106 gave during FY26 outside the campaign, and 90 were mailed the appeal.
 \* Kept because they also support Fort Salem (12), have a steward assigned (8), are on my
-keep list (5), or have a note (1); some qualify on more than one count. The four lapsed
-larger donors are $1,200–$8,900 lifetime givers whom I've kept for follow-up.
+keep list (5), or have a note (1); some qualify on more than one count. The four selected
+lapsed donors gave $1,200–$18,300 over the years but nothing since FY21; I've kept them for
+follow-up.
 
 A few notes on how the list was built:
 
@@ -68,17 +69,15 @@ A few notes on how the list was built:
 - **Deceased and surviving spouses**: a household is dropped only when everyone in it has
   died; where one spouse has died the household stays, addressed to the survivor (17 such
   households are on the list, e.g. Linda Slack, who gave $4,000 to last year's campaign).
-- **Do-not-contact**: Neon's do-not-contact flag is set on about 300 living individuals in
-  280 households (and about 100 company accounts), including several of our largest donors. I've left those households in and flagged them (18 on this list, on their own
-  sheet). Judy — could you remind us what that flag means (email opt-out?) so that we handle it properly?
-- The 94 **engaged non-donors** are worth a look: they're mostly families spending $500–$4,000
+- **Do-not-contact**: Neon's do-not-contact flag is set on many records, including several of our largest donors. I've left those households in the main list and flagged them. I've also put them in their own sheet to make it easier to review. Judy — could you remind us what that flag means (email opt-out?) so that we handle it properly?
+- The 94 **engaged non-donors** are mostly families spending $500–$4,000
   on classes with no giving history (81 of the 94 have never given anything; 83 registered
   for something in the last two years). Only 11 of them received last year's appeal, so for
   most this would be the first ask.
 
 I think we should have a separate letter for the engaged non-donors as they are so different from the other households on the list:
-  - It might discuss the youth program including, possibly, the teacher, the show their kid was in, and the performance.
-  - We'd say tuition does not cover full costs we subsidize to keep affordable -- Judy, can we discuss this?; I don't know how much of the variable cost is covered by tuition; beyond that, we keep buildings open, maintain them fix them, etc.
+  - It might discuss the youth program including, possibly, directors/instructors, and performances.
+  - Perhaps we'd say tuition does not cover full costs, and we subsidize it to keep it affordable -- Judy, can we discuss this?; I don't know how much of the variable cost is covered by tuition; beyond that, we keep buildings open, maintain them fix them, etc.
   - We'd do an ask for a modest gift and perhaps say "we've never asked you directly."
   - Maybe have it signed by Dan or Moe -- someone parents are familiar with?
 
@@ -86,7 +85,7 @@ The attached mailing-list workbook has one row per household with the giving his
 information, engagement, and the reason each household is included. It is sorted by 2025
 campaign gift, then five-year giving, then class spending (all descending), so the top of
 the sheet is the top of the list. A "letter" column says which letter each household gets
-("donor", "class-family", or "new-attender"), so one merge can branch on it.
+("donor", "class-family", or "new-attender"), so one merge can branch on it. Most of the important fields 
 
 ## Fort Salem Theater supporters
 
@@ -105,5 +104,9 @@ individual sponsors sort into three groups:
   rather than more searching.
 - **Not in Neon, small or one-time sponsors: about 170** — mostly one-year "Friends" at
   $20–99 and the 2020 reopening "Opening Angels" who never reappeared. Left out.
+
+I'm attaching a spreadsheet with 32 of the serious supporters for whom we have addresses. As noted above, I'd suggest a separate letter to them without the appeal.
+
+Thoughts?
 
 Don
