@@ -244,8 +244,8 @@ def pick_contact(accounts: pd.DataFrame, donations: pd.DataFrame) -> pd.DataFram
 
     # household flags (2026-08-28, after six widows who gave to the campaign were dropped):
     #   deceased       = EVERY member deceased (a surviving spouse keeps the household)
-    #   do_not_contact = any LIVING member flagged (Neon sets the flag on deceased members,
-    #                    which is why 422 households incl. top donors carry it)
+    #   do_not_contact = any LIVING member flagged (Neon also sets the flag on deceased
+    #                    members, so the raw flag overstates who is unreachable)
     #   deceased_members = names of the deceased, so a letter can avoid the late spouse
     flags = a.groupby("id", sort=True).agg(
         deceased=("_dead", "all"),
@@ -309,11 +309,13 @@ def apply_exclusions(
     - **Deceased**: the Neon deceased flag, or any hand/Neon note saying someone died —
       unless the note also names a survivor ("Tim has died; wife/gf still around"),
       since the mail then goes to the surviving partner.
-    - **Do-not-contact**: flagged, NOT dropped by default. Neon's flag sits on 422
-      households with $674k of lifetime giving — Dorothy Ashton, the Neubohns, Estey, Katz,
-      Merrill, Slack, Kruger — so it cannot mean "never contact" (2026-08-28; likely an
-      email opt-out or import artifact — Judy to confirm). ``drop_do_not_contact=True``
-      drops them once the flag's meaning is settled; the QA lists them either way.
+    - **Do-not-contact**: flagged, NOT dropped by default. Judged on living members only
+      (Neon also sets the flag on deceased members). It sits on ~300 living individuals in
+      280 households with $469k of lifetime giving — Dorothy Ashton, the Neubohns, Katz,
+      Merrill — plus ~100 company accounts, so it cannot mean "never contact"
+      (2026-08-28; likely an email opt-out or import artifact — Judy to confirm).
+      ``drop_do_not_contact=True`` drops them once the flag's meaning is settled; the QA
+      lists them either way.
     - **Small givers**: rows with under ``min_donor_5yr`` ($200) in 5 years drop unless
       keep-identified — a new person (Judy's new-accounts list, or Fort Salem), one of
       Don's hand notes or a steward assignment, the bolded silent keep-list, an appeal
