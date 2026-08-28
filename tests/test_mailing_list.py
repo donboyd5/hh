@@ -124,7 +124,7 @@ def test_predominant_engagement_labels():
 
 def test_pick_contact_most_gifts_then_fallback():
     accounts = _accounts()
-    accounts.loc[3, "deceased"] = True  # exercise the household ANY-flag here
+    accounts.loc[3, "deceased"] = True  # sole member deceased -> household deceased
     out = pick_contact(accounts, _donations()).set_index("id")
     # A1 has two gifts (d1 and the pledge payment d2) vs A2's one -> A1 (Ann) is the
     # contact; her missing email falls back to Bob's, other fields are her own
@@ -137,6 +137,23 @@ def test_pick_contact_most_gifts_then_fallback():
     assert bool(row["do_not_contact"]) is False  # ANY across members: H2's B1 is DNC
     assert bool(out.loc["H2", "do_not_contact"]) is True
     assert bool(out.loc["H3", "deceased"]) is True
+    assert out.loc["H3", "deceased_members"] == "New Person"
+
+
+def test_pick_contact_widow_keeps_household_and_becomes_contact():
+    accounts = _accounts()
+    # A1 (Ann) has the most gifts but has died, and carries Neon's do-not-contact flag as
+    # deceased members do; Bob survives -> household lives, Bob is the contact, not DNC
+    accounts.loc[0, "deceased"] = True
+    accounts.loc[0, "do_not_contact"] = True
+    out = pick_contact(accounts, _donations()).set_index("id")
+    h1 = out.loc["H1"]
+    assert bool(h1["deceased"]) is False
+    assert bool(h1["do_not_contact"]) is False
+    assert h1["contact_first_name"] == "Bob"
+    # deceased_members is built from full_name, which the fixture leaves blank for A1
+    assert h1["deceased_members"] in ("None", "nan")  # str() of the blank full_name
+    assert pd.isna(out.loc["H2", "deceased_members"])
     # address lines concatenate
     assert out.loc["H2", "address"] == "2 Elm St Apt 2"
     assert out.loc["H2", "note_neon"] == "longtime volunteer"

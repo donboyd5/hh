@@ -92,7 +92,7 @@ DON_FY_COLUMNS = [f"don_fy{fy}" for fy in GIVING_FYS]
 # household name, donation history, contact info, then everything else
 OUTPUT_COLUMNS = [
     # the three codes, then the household name and which letter it gets
-    "neon_hh_id", "neon_account_ids", "new_code", "household_name", "letter",
+    "neon_hh_id", "neon_account_ids", "new_code", "household_name", "letter", "neon_household_name",
     # donation history
     *DON_FY_COLUMNS, "don_5yr_total", "don_lifetime", "don_appeal_window",
     # contact info
@@ -106,7 +106,7 @@ OUTPUT_COLUMNS = [
     "never_donated", "gave_fy26", "gave_fy25", "no_gift_last_5yrs",
     "arts_spend_3fy", "classes_spend_3fy", "community_spend_3fy", "regs_3fy",
     "arts_spend_5fy", "classes_spend_5fy", "community_spend_5fy", "regs_5fy",
-    "predominant_engagement", "do_not_contact", "deceased", "distance_miles",
+    "predominant_engagement", "do_not_contact", "deceased", "deceased_members", "distance_miles",
     "steward", "steward_detail", "note_donor3", "note_new", "note_silent",
     "note_boyd", "note_neon", "fst_years", "fst_years_list", "fst_best_tier",
     "fst_candidate_id", "fst_candidate_name",
@@ -213,7 +213,9 @@ def pick_contact(accounts: pd.DataFrame, donations: pd.DataFrame) -> pd.DataFram
     a = accounts.drop_duplicates(subset=["account_id"]).merge(gifts, on="account_id", how="left")
     a["n_gifts"] = a["n_gifts"].fillna(0)
     a["created"] = pd.to_datetime(a.get("account_created_at"), errors="coerce")
-    a = a.sort_values(["id", "n_gifts", "created"], ascending=[True, False, True])
+    a["_dead"] = a["deceased"].fillna(False).astype(bool)
+    # living members first: a widow/widower is the contact, never the late spouse
+    a = a.sort_values(["id", "_dead", "n_gifts", "created"], ascending=[True, True, False, True])
     a = a.rename(columns=_CONTACT_FIELDS)
 
     fields = list(_CONTACT_FIELDS.values())
@@ -221,8 +223,18 @@ def pick_contact(accounts: pd.DataFrame, donations: pd.DataFrame) -> pd.DataFram
     contact = a.groupby("id", sort=True)[present].first().reset_index()
     for missing in set(fields) - set(present):
         contact[missing] = pd.NA  # e.g. pre-enrichment frames without the 2026-08 fields
-    anyflag = a.groupby("id", sort=True)[["deceased", "do_not_contact"]].max().reset_index()
-    contact = contact.merge(anyflag, on="id")
+
+    # household flags (2026-08-28, after six widows who gave to the campaign were dropped):
+    #   deceased       = EVERY member deceased (a surviving spouse keeps the household)
+    #   do_not_contact = any LIVING member flagged (Neon sets the flag on deceased members,
+    #                    which is why 422 households incl. top donors carry it)
+    #   deceased_members = names of the deceased, so a letter can avoid the late spouse
+    flags = a.groupby("id", sort=True).agg(
+        deceased=("_dead", "all"),
+        do_not_contact=("do_not_contact", lambda s: bool((s.fillna(False).astype(bool) & ~a.loc[s.index, "_dead"]).any())),
+        deceased_members=("full_name", lambda s: "; ".join(str(n) for n, d in zip(s, a.loc[s.index, "_dead"], strict=True) if d) or None),
+    ).reset_index()
+    contact = contact.merge(flags, on="id")
 
     line1 = contact.pop("address").astype("string").str.strip()
     line2 = contact.pop("address2").astype("string").str.strip()
@@ -581,6 +593,16 @@ def build_mailing_list(
 
     # -- exclusions (deceased; small donor-rule rows) -------------------------------
     table, exclusion_qa = apply_exclusions(table)
+
+    # a household with a deceased member is addressed to the living contact, not the
+    # Neon label that still names both ("Linda & Richard Slack" -> "Linda Slack");
+    # the Neon label is kept alongside
+    table["neon_household_name"] = table["household_name"]
+    survivor = table["deceased_members"].notna() & ~table["deceased"].fillna(False).astype(bool)
+    living_name = (
+        table["contact_first_name"].fillna("").astype(str) + " " + table["contact_last_name"].fillna("").astype(str)
+    ).str.strip()
+    table.loc[survivor & living_name.ne(""), "household_name"] = living_name[survivor & living_name.ne("")]
 
     table["letter"] = assign_letter(table)
 
