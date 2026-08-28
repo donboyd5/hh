@@ -284,7 +284,7 @@ def main() -> None:
                     "src_donor_5yr", "src_donor3", "src_new_accounts",
                     "src_silent_selected", "src_appeal_responded",
                     "src_appeal_gift (>= $10 in Oct 2025-Jan 2026)",
-                    "src_engaged_nondonor (>= $500 FY24-26 spend, no gift)", "fst flagged",
+                    "src_engaged_nondonor (>= $500 FY22-26 spend, no gift)", "fst flagged",
                     "do_not_contact", "deceased",
                 ],
                 "detail": [

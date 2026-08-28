@@ -50,10 +50,12 @@ APPEAL_WINDOW = (pd.Timestamp("2025-10-01"), pd.Timestamp("2026-01-31"))
 MIN_APPEAL_GIFT = 10.0
 
 # engaged non-donors: households with no successful gift in the 5-year window but at
-# least this much FY24-26 registration spending (arts + classes + community) enter the
-# list and are exempt from the giving floor (Don, 2026-08-28). In practice this is the
-# parents-of-class-kids pool — families spending $500-$4,000 on classes with zero gifts.
+# least this much FY22-26 registration spending (arts + classes + community) enter the
+# list and are exempt from the giving floor (Don, 2026-08-28; window widened from 3 to 5
+# years 2026-08-28 so giving and spending are judged over the same period). In practice
+# this is the parents-of-class-kids pool — families spending $500-$4,000 on classes.
 MIN_ENGAGED_NONDONOR_SPEND = 500.0
+ENGAGED_NONDONOR_FYS = GIVING_FYS
 
 # Fort Salem sponsors NOT in Neon are kept only if serious (rule B, Don 2026-08-28):
 # a $100+ tier (Inner Circle or higher) in any year 2021-2025, or sponsorship in two or
@@ -102,6 +104,7 @@ OUTPUT_COLUMNS = [
     "src_engaged_nondonor", "fst", "needs_review",
     "never_donated", "gave_fy26", "gave_fy25", "no_gift_last_5yrs",
     "arts_spend_3fy", "classes_spend_3fy", "community_spend_3fy", "regs_3fy",
+    "arts_spend_5fy", "classes_spend_5fy", "community_spend_5fy", "regs_5fy",
     "predominant_engagement", "do_not_contact", "deceased", "distance_miles",
     "steward", "steward_detail", "note_donor3", "note_new", "note_silent",
     "note_boyd", "note_neon", "fst_years", "fst_years_list", "fst_best_tier",
@@ -141,8 +144,13 @@ def appeal_window_gifts(
     )
 
 
-def engagement_spend(registrations: pd.DataFrame, fys: tuple[int, ...]) -> pd.DataFrame:
-    """Household registration dollars by engagement group (arts/classes/community) + counts."""
+def engagement_spend(
+    registrations: pd.DataFrame, fys: tuple[int, ...], *, suffix: str = "3fy"
+) -> pd.DataFrame:
+    """Household registration dollars by engagement group (arts/classes/community) + counts.
+
+    ``suffix`` names the window in the output columns (``arts_spend_3fy`` …).
+    """
     r = registrations.copy()
     r["fy"] = fiscal_year(r["starts_on"])
     r = r[r["fy"].isin(fys) & r["event_majorcat"].isin(CATEGORY_GROUPS)]
@@ -154,8 +162,8 @@ def engagement_spend(registrations: pd.DataFrame, fys: tuple[int, ...]) -> pd.Da
         index="id", columns="group", values="amount", aggfunc="sum", fill_value=0.0
     )
     spend = spend.reindex(columns=["arts", "classes", "community"], fill_value=0.0)
-    spend.columns = [f"{c}_spend_3fy" for c in spend.columns]
-    counts = r.groupby("id").size().rename("regs_3fy")
+    spend.columns = [f"{c}_spend_{suffix}" for c in spend.columns]
+    counts = r.groupby("id").size().rename(f"regs_{suffix}")
     return spend.join(counts).reset_index()
 
 
@@ -271,7 +279,7 @@ def apply_exclusions(
       keep-identified — a new person (Judy's new-accounts list, or Fort Salem), one of
       Don's hand notes or a steward assignment, the bolded silent keep-list, an appeal
       responder, a household that gave >= $10 in last year's campaign window, or an
-      engaged non-donor (>= $500 FY24-26 spending, no 5-year gift) (Don, 2026-08-27/28). Neon staff notes do not identify a keeper, consistent
+      engaged non-donor (>= $500 FY22-26 spending, no 5-year gift) (Don, 2026-08-27/28). Neon staff notes do not identify a keeper, consistent
       with the deceased scan.
 
     QA names every dropped household and why, so nothing disappears silently.
@@ -373,6 +381,7 @@ def build_mailing_list(
         .groupby("id")["donation_amount"].sum().rename("don_lifetime").reset_index()
     )
     engage = engagement_spend(registrations, ENGAGEMENT_FYS)
+    engage5 = engagement_spend(registrations, ENGAGED_NONDONOR_FYS, suffix="5fy")
     appeal_win = appeal_window_gifts(donations)
     contact = pick_contact(accounts, donations)
     neon_ids = neon_ids_by_household(accounts)
@@ -388,11 +397,11 @@ def build_mailing_list(
     )
     if appealed_ids is not None:
         appeal_gift_ids &= set(appealed_ids)
-    spend_3fy = engage.set_index("id")[
-        ["arts_spend_3fy", "classes_spend_3fy", "community_spend_3fy"]
+    spend_5fy = engage5.set_index("id")[
+        ["arts_spend_5fy", "classes_spend_5fy", "community_spend_5fy"]
     ].sum(axis=1)
     gave_5yr = set(gifts_fy.loc[gifts_fy[DON_FY_COLUMNS].sum(axis=1) > 0, "id"])
-    engaged_ids = set(spend_3fy[spend_3fy >= MIN_ENGAGED_NONDONOR_SPEND].index) - gave_5yr
+    engaged_ids = set(spend_5fy[spend_5fy >= MIN_ENGAGED_NONDONOR_SPEND].index) - gave_5yr
     ids = donor5_ids | d3_ids | na_ids | silent_ids | resp_ids | appeal_gift_ids | engaged_ids
 
     # -- base rows: every household from any source, even with no in-window gifts ---
@@ -428,6 +437,7 @@ def build_mailing_list(
     table = table.merge(lifetime, on="id", how="left")
     table = table.merge(appeal_win, on="id", how="left")
     table = table.merge(engage, on="id", how="left")
+    table = table.merge(engage5, on="id", how="left")
     table = table.merge(contact, on="id", how="left")
     table = table.merge(neon_ids, on="id", how="left")
     table = table.merge(
@@ -487,7 +497,8 @@ def build_mailing_list(
         table["don_5yr_total"].fillna(0) == 0
     )
 
-    for col in ("arts_spend_3fy", "classes_spend_3fy", "community_spend_3fy", "regs_3fy"):
+    for col in ("arts_spend_3fy", "classes_spend_3fy", "community_spend_3fy", "regs_3fy",
+                "arts_spend_5fy", "classes_spend_5fy", "community_spend_5fy", "regs_5fy"):
         table[col] = table[col].fillna(0.0)
     table["predominant_engagement"] = table.apply(predominant_engagement, axis=1)
 
