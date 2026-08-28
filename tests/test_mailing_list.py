@@ -297,9 +297,11 @@ def test_build_mailing_list_end_to_end():
     assert h3["src_new_accounts"] and h3["note_new"] == "came to gala"
 
     # H4: never gave, but $550 of classes in FY25-26 -> engaged non-donor, exempt from floor
+    # (window is FY22-26; these dates fall inside both the 3- and 5-year windows)
     h4 = table.loc["Class Family"]
     assert h4["src_engaged_nondonor"] and h4["never_donated"]
     assert h4["predominant_engagement"] == "classes" and h4["classes_spend_3fy"] == 550.0
+    assert h4["classes_spend_5fy"] == 550.0
 
     # Zed Sponsor: Fort Salem only, not in Neon -> new code, needs review, zeros
     zed = table.loc["Zed Sponsor"]
