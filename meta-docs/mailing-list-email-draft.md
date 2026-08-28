@@ -10,7 +10,7 @@ Hi all,
 
 I'm attaching an initial cut at a mailing list for the fall 2026 campaign. I'm also attaching a separate spreadsheet related to Fort Salem Theater.
 
-Comments welcome — this is a first pass and easy to rerun.
+Comments welcome — this is a first pass; it is automated and easy to rerun.
 
 ## Proposed mailing list for fall 2026 campaign
 
@@ -20,7 +20,9 @@ Comments welcome — this is a first pass and easy to rerun.
 <th rowspan="2" align="left">Kind of household</th>
 <th rowspan="2">Households</th>
 <th colspan="2">Gifts in FY26 (July 2025 – June 2026)</th>
+<th rowspan="2" style="border:none;width:1em"></th>
 <th colspan="3">Gifts over five years, FY22–26 (July 2021 – June 2026)</th>
+<th rowspan="2" style="border:none;width:1em"></th>
 <th colspan="2">Spending on tickets and classes, FY22–26</th>
 </tr>
 <tr>
@@ -34,14 +36,14 @@ Comments welcome — this is a first pass and easy to rerun.
 </tr>
 </thead>
 <tbody>
-<tr><td>Top 30 households by 2025-campaign gift</td><td align="right">30</td><td align="right">$23,091</td><td align="right">$8,019</td><td align="right">$117,824</td><td align="right">$2,501</td><td align="right">$3,927</td><td align="right">$28,405</td><td align="right">$4,659</td></tr>
-<tr><td>All other households that gave $10+ to the 2025 campaign</td><td align="right">95</td><td align="right">$8,543</td><td align="right">$3,707</td><td align="right">$45,380</td><td align="right">$275</td><td align="right">$478</td><td align="right">$28,065</td><td align="right">$21,305</td></tr>
-<tr><td>No campaign gift, but gave $200+ over five years‡</td><td align="right">88</td><td align="right">—</td><td align="right">$34,579</td><td align="right">$171,101</td><td align="right">$370</td><td align="right">$1,944</td><td align="right">$43,385</td><td align="right">$37,602</td></tr>
-<tr><td>No campaign gift, gave under $200 over five years, kept for a specific reason*</td><td align="right">20</td><td align="right">—</td><td align="right">$486</td><td align="right">$1,532</td><td align="right">$80</td><td align="right">$77</td><td align="right">$4,895</td><td align="right">$4,149</td></tr>
-<tr><td>Engaged non-donors: no gift in five years, but spent $500+ on classes or tickets over the same five years</td><td align="right">93</td><td align="right">—</td><td align="right">—</td><td align="right">—</td><td align="right">—</td><td align="right">—</td><td align="right">$4,995</td><td align="right">$118,450</td></tr>
-<tr><td>New accounts opened in FY25–26 with $100+ of registrations since opening, no gift yet</td><td align="right">67</td><td align="right">—</td><td align="right">—</td><td align="right">—</td><td align="right">—</td><td align="right">—</td><td align="right">$5,630</td><td align="right">$3,012</td></tr>
-<tr><td>Lapsed larger donors (nothing since FY21), kept by hand for follow-up</td><td align="right">3</td><td align="right">—</td><td align="right">—</td><td align="right">—</td><td align="right">—</td><td align="right">—</td><td align="right">$250</td><td align="right">$40</td></tr>
-<tr><td><b>Total</b></td><td align="right"><b>396</b></td><td align="right"><b>$31,633</b></td><td align="right"><b>$46,792</b></td><td align="right"><b>$335,837</b></td><td align="right"><b>$350</b></td><td align="right"><b>$1,441</b></td><td align="right"><b>$115,625</b></td><td align="right"><b>$189,216</b></td></tr>
+<tr><td>Top 30 households by 2025-campaign gift</td><td align="right">30</td><td align="right">$23,091</td><td align="right">$8,019</td><td style="border:none"></td><td align="right">$117,824</td><td align="right">$2,501</td><td align="right">$3,927</td><td style="border:none"></td><td align="right">$28,405</td><td align="right">$4,659</td></tr>
+<tr><td>All other households that gave $10+ to the 2025 campaign</td><td align="right">95</td><td align="right">$8,543</td><td align="right">$3,707</td><td style="border:none"></td><td align="right">$45,380</td><td align="right">$275</td><td align="right">$478</td><td style="border:none"></td><td align="right">$28,065</td><td align="right">$21,305</td></tr>
+<tr><td>No campaign gift, but gave $200+ over five years‡</td><td align="right">88</td><td align="right">—</td><td align="right">$34,579</td><td style="border:none"></td><td align="right">$171,101</td><td align="right">$370</td><td align="right">$1,944</td><td style="border:none"></td><td align="right">$43,385</td><td align="right">$37,602</td></tr>
+<tr><td>No campaign gift, gave under $200 over five years, kept for a specific reason*</td><td align="right">20</td><td align="right">—</td><td align="right">$486</td><td style="border:none"></td><td align="right">$1,532</td><td align="right">$80</td><td align="right">$77</td><td style="border:none"></td><td align="right">$4,895</td><td align="right">$4,149</td></tr>
+<tr><td>Engaged non-donors: no gift in five years, but spent $500+ on classes or tickets over the same five years</td><td align="right">93</td><td align="right">—</td><td align="right">—</td><td style="border:none"></td><td align="right">—</td><td align="right">—</td><td align="right">—</td><td style="border:none"></td><td align="right">$4,995</td><td align="right">$118,450</td></tr>
+<tr><td>New accounts opened in FY25–26 with $100+ of registrations since opening, no gift yet</td><td align="right">67</td><td align="right">—</td><td align="right">—</td><td style="border:none"></td><td align="right">—</td><td align="right">—</td><td align="right">—</td><td style="border:none"></td><td align="right">$5,630</td><td align="right">$3,012</td></tr>
+<tr><td>Lapsed larger donors (nothing since FY21), kept by hand for follow-up</td><td align="right">3</td><td align="right">—</td><td align="right">—</td><td style="border:none"></td><td align="right">—</td><td align="right">—</td><td align="right">—</td><td style="border:none"></td><td align="right">$250</td><td align="right">$40</td></tr>
+<tr><td><b>Total</b></td><td align="right"><b>396</b></td><td align="right"><b>$31,633</b></td><td align="right"><b>$46,792</b></td><td style="border:none"></td><td align="right"><b>$335,837</b></td><td align="right"><b>$350</b></td><td align="right"><b>$1,441</b></td><td style="border:none"></td><td align="right"><b>$115,625</b></td><td align="right"><b>$189,216</b></td></tr>
 </tbody>
 </table>
 
