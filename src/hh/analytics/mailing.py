@@ -556,7 +556,13 @@ def build_mailing_list(
     # -- exclusions (deceased; small donor-rule rows) -------------------------------
     table, exclusion_qa = apply_exclusions(table)
 
-    table = table.sort_values("household_name").reset_index(drop=True)
+    # sort (Don, 2026-08-28): 2025-campaign gift, then 5-year giving, then class spending,
+    # all descending; name breaks ties. Campaign gift counts only for appealed responders.
+    table["_campaign"] = table["don_appeal_window"].where(table["src_appeal_gift"], 0.0)
+    table = table.sort_values(
+        ["_campaign", "don_5yr_total", "classes_spend_5fy", "household_name"],
+        ascending=[False, False, False, True],
+    ).drop(columns="_campaign").reset_index(drop=True)
     if table.duplicated(subset=["household_name", "id"]).any():
         # a merge exploded rows (an NA id keying against another frame) — fail loudly
         # rather than ship a silently duplicated mailing list. (Distinct ids that share

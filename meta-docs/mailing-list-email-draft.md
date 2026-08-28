@@ -80,7 +80,9 @@ I think we should have a separate letter for the engaged non-donors as they are 
   - Maybe have it signed by Dan or Moe -- someone parents are familiar with?
 
 The attached mailing-list workbook has one row per household with the giving history, contact
-information, engagement, and the reason each household is included.
+information, engagement, and the reason each household is included. It is sorted by 2025
+campaign gift, then five-year giving, then class spending (all descending), so the top of
+the sheet is the top of the list.
 
 ## Fort Salem Theater supporters
 

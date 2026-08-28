@@ -316,8 +316,12 @@ def test_build_mailing_list_end_to_end():
     assert zed["never_donated"] and zed["predominant_engagement"] == "none"
     assert zed["fst_best_tier"] == "inner circle"
 
-    # one row per household, sorted by name
+    # one row per household; sorted campaign gift desc, 5-yr giving desc, class spend desc
     assert table.index.is_unique
+    order = table.index.tolist()
+    assert order[0] == "Carol Dane"  # the only campaign-window giver
+    assert order[1] == "Ann & Bob Smith"  # then largest 5-yr giving
+    assert order[-1] == "Zed Sponsor"  # Fort Salem: no gifts, no spend
 
 
 def test_fst_keep_mask_rule_b():
