@@ -12,6 +12,8 @@ I'm attaching an initial cut at a mailing list for the fall 2026 campaign. I'm a
 
 Comments welcome — this is a first pass; it is automated and easy to rerun.
 
+Don
+
 ## Proposed mailing list for fall 2026 campaign
 
 <table>
@@ -50,9 +52,13 @@ Comments welcome — this is a first pass; it is automated and easy to rerun.
 "Gave to the 2025 campaign" = received last fall's appeal and gave $10 or more to the
 Annual Fund Drive between October 1, 2025 and January 31, 2026 (matches Judy's campaign
 total; gifts in that window coded to other funds show under "rest of FY26"). The top 30
-start at a $250 campaign gift and account for 77% of campaign dollars. Median and average are five-year *totals* per household, among
-households that gave in the period (divide by five for a per-year figure).
+start at a $250 campaign gift and account for 77% of campaign dollars.
+
+† Median and average are five-year *totals* per household, among households that gave in
+the period (divide by five for a per-year figure).
+
 ‡ 54 of these 106 gave during FY26 outside the campaign, and 90 were mailed the appeal.
+
 \* Kept because they also support Fort Salem (12), have a steward assigned (8), are on my
 keep list (5), or have a note (1); some qualify on more than one count. The four selected
 lapsed donors gave $1,200–$18,300 over the years but nothing since FY21; I've kept them for
@@ -85,7 +91,7 @@ The attached mailing-list workbook has one row per household with the giving his
 information, engagement, and the reason each household is included. It is sorted by 2025
 campaign gift, then five-year giving, then class spending (all descending), so the top of
 the sheet is the top of the list. A "letter" column says which letter each household gets
-("donor", "class-family", or "new-attender"), so one merge can branch on it. Most of the important fields 
+("donor", "class-family", or "new-attender"), so one merge can branch on it. Most of the important fields
 
 ## Fort Salem Theater supporters
 
@@ -106,7 +112,3 @@ individual sponsors sort into three groups:
   $20–99 and the 2020 reopening "Opening Angels" who never reappeared. Left out.
 
 I'm attaching a spreadsheet with 32 of the serious supporters for whom we have addresses. As noted above, I'd suggest a separate letter to them without the appeal.
-
-Thoughts?
-
-Don
