@@ -320,7 +320,7 @@ def test_build_mailing_list_end_to_end():
     assert table.loc["Ann & Bob Smith", "letter"] == "donor"
     assert table.loc["Carol Dane", "letter"] == "donor"
     assert table.loc["Class Family", "letter"] == "class-family"
-    assert table.loc["New Person", "letter"] == "donor"  # lapsed donor (gave FY21): donor letter
+    assert table.loc["New Person", "letter"] == "new-attender"  # no 5-yr gift + new-accounts list
     assert table.loc["Zed Sponsor", "letter"] == "fst-personal"
 
     # one row per household; sorted campaign gift desc, 5-yr giving desc, class spend desc
