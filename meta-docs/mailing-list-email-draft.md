@@ -59,9 +59,7 @@ larger donors are $1,200–$8,900 lifetime givers whom I've kept for follow-up.
 
 A few notes on how the list was built:
 
-- **Fiscal years** run July–June and are labeled by the ending year, matching Judy's reports.
-- **Who's in**: anyone who gave $200 or more over the last five years; donors under $200 only
-  if there's a specific reason to keep them (above); households that have not given in five
+- **Who's in**: anyone who gave to the 2025 campaign; anyone who did not give to the campaign but gave $200 or more over the last five years; donors under $200 only if there's a specific reason to keep them (above); households that have not given in five
   years but spent $500+ on classes or tickets over the same five years; and new Neon accounts
   from the last two years with at least $100 of registrations. Everything comes from Neon
   except my keep list and steward notes.
@@ -71,10 +69,8 @@ A few notes on how the list was built:
   died; where one spouse has died the household stays, addressed to the survivor (17 such
   households are on the list, e.g. Linda Slack, who gave $4,000 to last year's campaign).
 - **Do-not-contact**: Neon's do-not-contact flag is set on nearly 400 living people across
-  378 households, including several of our largest donors, so it can't mean "never
-  contact." I've left those households in and flagged them (18 on this list, on their own
-  sheet). Judy — can you tell us what that flag means in practice (email opt-out? an old
-  import?) so we handle it right?
+  378 households, including several of our largest donors. I've left those households in and flagged them (18 on this list, on their own
+  sheet). Judy — could you remind us what that flag means (email opt-out?) so that we handle it properly?
 - The 94 **engaged non-donors** are worth a look: they're mostly families spending $500–$4,000
   on classes with no giving history (81 of the 94 have never given anything; 83 registered
   for something in the last two years). Only 11 of them received last year's appeal, so for
