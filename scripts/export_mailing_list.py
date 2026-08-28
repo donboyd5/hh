@@ -36,6 +36,7 @@ from hh.external.provenance import append_external_manifest, external_source_ent
 
 XLSX_FILENAME = "hh-mailing-list.xlsx"
 SHARE_FILENAME = "hh-mailing-list-share.xlsx"  # colleague version: no research/review sheets
+PROSPECTS_FILENAME = "fst-prospects-not-in-neon.xlsx"  # Fort Salem sponsors with no Neon account
 JUDY_FILENAME = "fst-donors-in-neon.xlsx"
 
 # Hand-maintained aliases for workbook names that no longer match Neon exactly (Neon
@@ -337,6 +338,29 @@ def main() -> None:
         )
         about.to_excel(xw, sheet_name="about", index=False)
 
+    # Fort Salem prospects: sponsors with NO Neon account (the point of the exercise) —
+    # the 75 kept by rule B with whatever address the research found, plus the sponsors
+    # rule B dropped, so nobody is lost if the bar moves
+    prospects = table[table["letter"].eq("fst-personal")][
+        ["new_code", "household_name", "fst_best_tier", "fst_years", "fst_years_list",
+         "address", "city", "state_province", "zip_code", "address_source", "contact_note",
+         "fst_candidate_name"]
+    ].rename(columns={"fst_years": "years_sponsored", "fst_years_list": "years",
+                      "fst_candidate_name": "possible_neon_match_unconfirmed"})
+    prospects = prospects.sort_values(
+        ["address", "years_sponsored", "household_name"], ascending=[False, False, True],
+        na_position="last",
+    )
+    with pd.ExcelWriter(config.layer_dir("processed") / PROSPECTS_FILENAME, engine="openpyxl") as xw:
+        prospects.to_excel(xw, sheet_name="prospects", index=False)
+        _freeze_header(xw.sheets["prospects"])
+        fst_research.to_excel(xw, sheet_name="address-research", index=False)
+        _freeze_header(xw.sheets["address-research"])
+        pd.DataFrame(table.attrs.get("fst_dropped", [])).rename(
+            columns={"n_years": "years_sponsored", "years": "years"}
+        ).to_excel(xw, sheet_name="dropped-below-rule-B", index=False)
+        _freeze_header(xw.sheets["dropped-below-rule-B"])
+
     # provenance: one entry per distinct file version of each hand-maintained source
     for filename, note in [
         (ml.DONOR3_FILENAME, "Judy's FY24-FY26 donor export with Don's Ambassador/notes"),
@@ -394,7 +418,8 @@ def main() -> None:
     for source, names in unmatched.items():
         if names:
             print(f"  UNMATCHED {source} ({len(names)}): {names[:8]}")
-    print(f"saved: mailing_list.parquet, {XLSX_FILENAME}, {SHARE_FILENAME} (colleagues)")
+    print(f"saved: mailing_list.parquet, {XLSX_FILENAME}, {SHARE_FILENAME} (colleagues), "
+          f"{PROSPECTS_FILENAME} (Fort Salem not in Neon)")
 
 
 if __name__ == "__main__":
