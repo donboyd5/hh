@@ -289,7 +289,7 @@ def main() -> None:
                     "letter = donor", "letter = class-family", "letter = new-attender",
                     "letter = fst-personal (not in the appeal)",
                     "src_silent_selected", "src_appeal_responded",
-                    "src_appeal_gift (>= $10 in Oct 2025-Jan 2026)",
+                    "src_appeal_gift (>= $10 to the campaign, Oct 2025-Jan 2026, appealed)",
                     "src_engaged_nondonor (>= $500 FY22-26 spend, no gift)", "fst flagged",
                     "do_not_contact (flagged, kept; see sheet)", "deceased",
                 ],

@@ -42,12 +42,12 @@ DE_MINIMIS_5YR = 10.0
 MIN_DONOR_5YR = 200.0
 
 # last year's annual-campaign period: a household that RECEIVED the appeal (appealed=TRUE
-# in the appeal workbook) and gave at least this much in the window is kept regardless of
-# the floor (Don, 2026-08-28). Any successful gift counts, not just those Judy coded to
-# the Annual Fund Drive campaign — a gift during the appeal is a response whichever
-# bucket it landed in (Misc Donation, Sustaining Donor, ...); the appealed restriction
-# is what excludes sustainer autopayments from people who were never mailed.
+# in the appeal workbook) and gave at least this much to the campaign in the window is
+# kept regardless of the floor (Don, 2026-08-28). Only gifts coded to the Annual Fund
+# Drive campaign count (Don, 2026-08-28 — matches Judy's campaign total; the ~$2k of
+# window gifts coded Misc/Sustaining show up as "rest of FY26" instead).
 APPEAL_WINDOW = (pd.Timestamp("2025-10-01"), pd.Timestamp("2026-01-31"))
+APPEAL_CAMPAIGN = "Annual Fund Drive - 2025-2026"
 MIN_APPEAL_GIFT = 10.0
 
 # engaged non-donors: households with no successful gift in the 5-year window but at
@@ -136,10 +136,16 @@ def appeal_window_gifts(
     donations: pd.DataFrame,
     *,
     window: tuple[pd.Timestamp, pd.Timestamp] = APPEAL_WINDOW,
+    campaign: str | None = APPEAL_CAMPAIGN,
 ) -> pd.DataFrame:
-    """Household succeeded-gift totals inside the annual-campaign window -> [id, don_appeal_window]."""
+    """Household succeeded-gift totals to the campaign inside its window -> [id, don_appeal_window].
+
+    ``campaign=None`` counts every gift in the window regardless of campaign code.
+    """
     g = succeeded_individual_gifts(donations)
     g = g[g["donation_date"].between(window[0], window[1])]
+    if campaign is not None and "campaign" in g.columns:
+        g = g[g["campaign"].eq(campaign)]
     return (
         g.groupby("id")["donation_amount"].sum().rename("don_appeal_window").reset_index()
     )

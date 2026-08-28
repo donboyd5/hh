@@ -63,6 +63,7 @@ def _donations():
                 "DONATION", PLEDGE_PAYMENT, "DONATION", "DONATION", "DONATION", "DONATION",
             ],
             "donation_status": ["SUCCEEDED"] * 6,
+            "campaign": [None, None, "Annual Fund Drive - 2025-2026", None, None, None],
             "donation_amount": [5.0, 10.0, 500.0, 7.0, 2022.5, 3.0],
             # FY labels: 2024-06-30 -> FY24; 2024-07-01 -> FY25; 2020 -> FY21 (outside window)
             "donation_date": pd.to_datetime(
@@ -359,3 +360,12 @@ def test_fst_keep_mask_rule_b():
         }
     )
     assert fst_keep_mask(fst).tolist() == [False, True, True, False, True, True]
+
+
+def test_appeal_window_gifts_counts_only_campaign_coded_gifts():
+    from hh.analytics.mailing import appeal_window_gifts
+
+    d = _donations()
+    d.loc[2, "campaign"] = "Misc Donation"  # H2's $500 in the window, not campaign-coded
+    assert appeal_window_gifts(d).empty
+    assert appeal_window_gifts(d, campaign=None).set_index("id").loc["H2", "don_appeal_window"] == 500.0
