@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import re
 
+import numpy as np
 import pandas as pd
 
 from ..analytics.donors import succeeded_individual_gifts
@@ -41,12 +42,12 @@ DE_MINIMIS_5YR = 10.0
 MIN_DONOR_5YR = 200.0
 
 # last year's annual-campaign period: a household that RECEIVED the appeal (appealed=TRUE
-# in the appeal workbook) and gave at least this much in the window is kept regardless of
-# the floor (Don, 2026-08-28). Any successful gift counts, not just those Judy coded to
-# the Annual Fund Drive campaign — a gift during the appeal is a response whichever
-# bucket it landed in (Misc Donation, Sustaining Donor, ...); the appealed restriction
-# is what excludes sustainer autopayments from people who were never mailed.
+# in the appeal workbook) and gave at least this much to the campaign in the window is
+# kept regardless of the floor (Don, 2026-08-28). Only gifts coded to the Annual Fund
+# Drive campaign count (Don, 2026-08-28 — matches Judy's campaign total; the ~$2k of
+# window gifts coded Misc/Sustaining show up as "rest of FY26" instead).
 APPEAL_WINDOW = (pd.Timestamp("2025-10-01"), pd.Timestamp("2026-01-31"))
+APPEAL_CAMPAIGN = "Annual Fund Drive - 2025-2026"
 MIN_APPEAL_GIFT = 10.0
 
 # engaged non-donors: households with no successful gift in the 5-year window but at
@@ -90,8 +91,8 @@ DON_FY_COLUMNS = [f"don_fy{fy}" for fy in GIVING_FYS]
 # column order in the exported table (Don, 2026-08-27): the three id codes, the
 # household name, donation history, contact info, then everything else
 OUTPUT_COLUMNS = [
-    # the three codes, then the household name
-    "neon_hh_id", "neon_account_ids", "new_code", "household_name",
+    # the three codes, then the household name and which letter it gets
+    "neon_hh_id", "neon_account_ids", "new_code", "household_name", "letter", "neon_household_name",
     # donation history
     *DON_FY_COLUMNS, "don_5yr_total", "don_lifetime", "don_appeal_window",
     # contact info
@@ -105,7 +106,7 @@ OUTPUT_COLUMNS = [
     "never_donated", "gave_fy26", "gave_fy25", "no_gift_last_5yrs",
     "arts_spend_3fy", "classes_spend_3fy", "community_spend_3fy", "regs_3fy",
     "arts_spend_5fy", "classes_spend_5fy", "community_spend_5fy", "regs_5fy",
-    "predominant_engagement", "do_not_contact", "deceased", "distance_miles",
+    "predominant_engagement", "do_not_contact", "deceased", "deceased_members", "distance_miles",
     "steward", "steward_detail", "note_donor3", "note_new", "note_silent",
     "note_boyd", "note_neon", "fst_years", "fst_years_list", "fst_best_tier",
     "fst_candidate_id", "fst_candidate_name",
@@ -135,10 +136,16 @@ def appeal_window_gifts(
     donations: pd.DataFrame,
     *,
     window: tuple[pd.Timestamp, pd.Timestamp] = APPEAL_WINDOW,
+    campaign: str | None = APPEAL_CAMPAIGN,
 ) -> pd.DataFrame:
-    """Household succeeded-gift totals inside the annual-campaign window -> [id, don_appeal_window]."""
+    """Household succeeded-gift totals to the campaign inside its window -> [id, don_appeal_window].
+
+    ``campaign=None`` counts every gift in the window regardless of campaign code.
+    """
     g = succeeded_individual_gifts(donations)
     g = g[g["donation_date"].between(window[0], window[1])]
+    if campaign is not None and "campaign" in g.columns:
+        g = g[g["campaign"].eq(campaign)]
     return (
         g.groupby("id")["donation_amount"].sum().rename("don_appeal_window").reset_index()
     )
@@ -199,6 +206,18 @@ _CONTACT_FIELDS = {
 }
 
 
+def _any_living_flag(flags: pd.Series, members: pd.DataFrame) -> bool:
+    """True if any LIVING member of the group carries the flag."""
+    return bool((flags.fillna(False).astype(bool) & ~members.loc[flags.index, "_dead"]).any())
+
+
+def _deceased_names(names: pd.Series, members: pd.DataFrame) -> str | None:
+    """"; "-joined names of the group's deceased members, or None."""
+    dead = members.loc[names.index, "_dead"]
+    joined = "; ".join(str(n) for n, d in zip(names, dead, strict=True) if d)
+    return joined or None
+
+
 def pick_contact(accounts: pd.DataFrame, donations: pd.DataFrame) -> pd.DataFrame:
     """One contact row per household rollup id (most lifetime gifts, earliest created first).
 
@@ -212,7 +231,9 @@ def pick_contact(accounts: pd.DataFrame, donations: pd.DataFrame) -> pd.DataFram
     a = accounts.drop_duplicates(subset=["account_id"]).merge(gifts, on="account_id", how="left")
     a["n_gifts"] = a["n_gifts"].fillna(0)
     a["created"] = pd.to_datetime(a.get("account_created_at"), errors="coerce")
-    a = a.sort_values(["id", "n_gifts", "created"], ascending=[True, False, True])
+    a["_dead"] = a["deceased"].fillna(False).astype(bool)
+    # living members first: a widow/widower is the contact, never the late spouse
+    a = a.sort_values(["id", "_dead", "n_gifts", "created"], ascending=[True, True, False, True])
     a = a.rename(columns=_CONTACT_FIELDS)
 
     fields = list(_CONTACT_FIELDS.values())
@@ -220,8 +241,18 @@ def pick_contact(accounts: pd.DataFrame, donations: pd.DataFrame) -> pd.DataFram
     contact = a.groupby("id", sort=True)[present].first().reset_index()
     for missing in set(fields) - set(present):
         contact[missing] = pd.NA  # e.g. pre-enrichment frames without the 2026-08 fields
-    anyflag = a.groupby("id", sort=True)[["deceased", "do_not_contact"]].max().reset_index()
-    contact = contact.merge(anyflag, on="id")
+
+    # household flags (2026-08-28, after six widows who gave to the campaign were dropped):
+    #   deceased       = EVERY member deceased (a surviving spouse keeps the household)
+    #   do_not_contact = any LIVING member flagged (Neon sets the flag on deceased members,
+    #                    which is why 422 households incl. top donors carry it)
+    #   deceased_members = names of the deceased, so a letter can avoid the late spouse
+    flags = a.groupby("id", sort=True).agg(
+        deceased=("_dead", "all"),
+        do_not_contact=("do_not_contact", lambda s: _any_living_flag(s, a)),
+        deceased_members=("full_name", lambda s: _deceased_names(s, a)),
+    ).reset_index()
+    contact = contact.merge(flags, on="id")
 
     line1 = contact.pop("address").astype("string").str.strip()
     line2 = contact.pop("address2").astype("string").str.strip()
@@ -287,7 +318,8 @@ def apply_exclusions(
       keep-identified — a new person (Judy's new-accounts list, or Fort Salem), one of
       Don's hand notes or a steward assignment, the bolded silent keep-list, an appeal
       responder, a household that gave >= $10 in last year's campaign window, or an
-      engaged non-donor (>= $500 FY22-26 spending, no 5-year gift) (Don, 2026-08-27/28). Neon staff notes do not identify a keeper, consistent
+      engaged non-donor (>= $500 FY22-26 spending, no 5-year gift) (Don, 2026-08-27/28).
+      Neon staff notes do not identify a keeper, consistent
       with the deceased scan.
 
     QA names every dropped household and why, so nothing disappears silently.
@@ -316,7 +348,8 @@ def apply_exclusions(
 
     qa = {
         "do_not_contact": table.loc[
-            table["do_not_contact"].fillna(False).astype(bool) & ~deceased & ~small, "household_name"
+            table["do_not_contact"].fillna(False).astype(bool) & ~deceased & ~small,
+            "household_name",
         ].tolist(),
         "dropped_do_not_contact": table.loc[dnc & ~deceased, "household_name"].tolist(),
         "dropped_deceased_neon": table.loc[
@@ -349,10 +382,35 @@ def fst_keep_mask(fst_summary: pd.DataFrame) -> pd.Series:
     tier = fst_summary["best_tier"].astype(str).str.strip().str.lower()
     rank = tier.map(FST_TIER_RANK).fillna(0)
     years = fst_summary["years"].astype(str).str.split(",")
-    last_year = years.map(lambda l: max((int(y) for y in l if y.strip().isdigit()), default=0))
+    last_year = years.map(lambda ys: max((int(y) for y in ys if y.strip().isdigit()), default=0))
     n_years = pd.to_numeric(fst_summary["n_years"], errors="coerce").fillna(0)
     angels_2020_only = tier.eq("opening angels") & last_year.eq(2020)
     return ((rank >= FST_KEEP_MIN_RANK) & ~angels_2020_only) | (n_years >= FST_KEEP_MIN_YEARS)
+
+
+# which letter template a household gets (Don, 2026-08-28). One mail merge branches on
+# this instead of hand-sorting the sheet; it stays right when the list is regenerated.
+LETTER_DONOR = "donor"  # has given in the last five years, or a hand-kept lapsed donor
+LETTER_CLASS_FAMILY = "class-family"  # engaged non-donor: paid for classes/tickets, never asked
+LETTER_NEW_ATTENDER = "new-attender"  # new Neon account, no gift yet
+LETTER_FST = "fst-personal"  # Fort Salem sponsor not in Neon: Don's personal letter, not the appeal
+
+
+def assign_letter(table: pd.DataFrame) -> pd.Series:
+    """Letter template per row, in the same priority order as the summary categories."""
+    return pd.Series(
+        np.select(
+            [
+                ~table["in_neon"].fillna(False).astype(bool),
+                table["don_5yr_total"].fillna(0) > 0,
+                table["src_engaged_nondonor"].fillna(False).astype(bool),
+                table["src_new_accounts"].fillna(False).astype(bool),
+            ],
+            [LETTER_FST, LETTER_DONOR, LETTER_CLASS_FAMILY, LETTER_NEW_ATTENDER],
+            default=LETTER_DONOR,  # the hand-kept lapsed donors
+        ),
+        index=table.index,
+    )
 
 
 def _new_codes(names: pd.Series) -> pd.Series:
@@ -432,7 +490,8 @@ def build_mailing_list(
     fst_neon = fst_summary[in_neon_flag]
     fst_not_neon = fst_summary[~in_neon_flag]
     keep = fst_keep_mask(fst_not_neon)
-    fst_dropped = fst_not_neon[~keep][["name", "best_tier", "n_years", "years"]].reset_index(drop=True)
+    fst_dropped = fst_not_neon.loc[~keep, ["name", "best_tier", "n_years", "years"]]
+    fst_dropped = fst_dropped.reset_index(drop=True)
     fst_new = fst_not_neon[keep].copy()
     fst_new = fst_new.rename(
         columns={
@@ -465,7 +524,9 @@ def build_mailing_list(
         fst_neon[["id", "n_years", "years", "best_tier"]]
         .drop_duplicates(subset=["id"])
         .rename(
-            columns={"n_years": "fst_years", "years": "fst_years_list", "best_tier": "fst_best_tier"}
+            columns={
+                "n_years": "fst_years", "years": "fst_years_list", "best_tier": "fst_best_tier",
+            }
         ),
         on="id", how="left",
     )
@@ -556,6 +617,21 @@ def build_mailing_list(
     # -- exclusions (deceased; small donor-rule rows) -------------------------------
     table, exclusion_qa = apply_exclusions(table)
 
+    # a household with a deceased member is addressed to the living contact, not the
+    # Neon label that still names both ("Linda & Richard Slack" -> "Linda Slack");
+    # the Neon label is kept alongside
+    table["neon_household_name"] = table["household_name"]
+    survivor = table["deceased_members"].notna() & ~table["deceased"].fillna(False).astype(bool)
+    living_name = (
+        table["contact_first_name"].fillna("").astype(str)
+        + " "
+        + table["contact_last_name"].fillna("").astype(str)
+    ).str.strip()
+    relabel = survivor & living_name.ne("")
+    table.loc[relabel, "household_name"] = living_name[relabel]
+
+    table["letter"] = assign_letter(table)
+
     # sort (Don, 2026-08-28): 2025-campaign gift, then 5-year giving, then class spending,
     # all descending; name breaks ties. Campaign gift counts only for appealed responders.
     table["_campaign"] = table["don_appeal_window"].where(table["src_appeal_gift"], 0.0)
@@ -569,7 +645,9 @@ def build_mailing_list(
         # a name are legitimate — duplicate person records in Neon, e.g. Krauss — and
         # surface in the export QA instead.)
         dups = table.loc[table.duplicated(subset=["household_name", "id"]), "household_name"]
-        raise ValueError(f"duplicated households in mailing list (merge explosion?): {list(dups.head())}")
+        raise ValueError(
+            f"duplicated households in mailing list (merge explosion?): {list(dups.head())}"
+        )
 
     # output-facing names: the join key becomes the household id code, and the member
     # account ids read as what they are (internal callers still use id / neon_ids)

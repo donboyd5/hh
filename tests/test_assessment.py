@@ -33,7 +33,9 @@ def test_parse_roll_reads_owners_and_mailing_address():
     a = df.iloc[0]
     assert a["parcel"] == "191.-5-3" and a["location"] == "1075 County Route 30"
     assert a["owners"] == "Snyder Daniel R | Snyder Diane C"
-    assert (a["street"], a["city"], a["state"], a["zip"]) == ("1087 County Route 30", "Salem", "NY", "12865")
+    assert (a["street"], a["city"], a["state"], a["zip"]) == (
+        "1087 County Route 30", "Salem", "NY", "12865",
+    )
     b = df.iloc[1]
     assert b["street"] == "PO Box 412" and b["city"] == "Hoosick Falls"
 
@@ -47,7 +49,9 @@ def test_surname_close_variants_but_not_truncations():
 
 def test_owner_tokens_strip_legal_noise():
     assert owner_tokens("Wever Trust David O") == ["wever", "david", "o"]
-    assert owner_tokens("FOWLER JR DOUGLAS M & CHRISTINE M") == ["fowler", "douglas", "m", "christine", "m"]
+    assert owner_tokens("FOWLER JR DOUGLAS M & CHRISTINE M") == [
+        "fowler", "douglas", "m", "christine", "m",
+    ]
 
 
 def test_match_names_to_owners_both_name_orders_and_ranking():
@@ -74,4 +78,5 @@ def test_vt_parcels_as_rolls_shape():
          "ADDRGL2": [None], "CITYGL": ["EAST ARLINGTON"], "STGL": ["VT"], "ZIPGL": ["05252-0000"]}
     )
     r = vt_parcels_as_rolls(vt).iloc[0]
-    assert r["owners"] == "WESTORT STEVEN W" and r["city"] == "East Arlington" and r["zip"] == "05252"
+    assert r["owners"] == "WESTORT STEVEN W"
+    assert r["city"] == "East Arlington" and r["zip"] == "05252"

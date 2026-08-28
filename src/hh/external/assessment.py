@@ -21,13 +21,25 @@ import pandas as pd
 
 LEFT_COL = 31
 _BLOCK_START = re.compile(r"^\*{10,}\s+(\S+)\s+\*+")
-_CITY_LINE = re.compile(r"^(?P<city>[A-Za-z .'-]+),\s+(?P<state>[A-Z]{2})\s+(?P<zip>\d{5}(?:-\d{4})?)\s*$")
-_PAGE_NOISE = re.compile(r"^(STATE OF NEW YORK|COUNTY -|TOWN\s+-|SWIS\s+-|TAX MAP PARCEL|CURRENT OWNERS|PARCEL SIZE|\s*$)")
-_LEFT_NOISE = re.compile(r"^(MAY BE SUBJECT|UNDER AGDIST|UNDER RPTL|PRIOR OWNER|DEED BOOK|FULL MARKET|EAST-|ACRES|FRNT|BANK)", re.I)
+_CITY_LINE = re.compile(
+    r"^(?P<city>[A-Za-z .'-]+),\s+(?P<state>[A-Z]{2})\s+(?P<zip>\d{5}(?:-\d{4})?)\s*$"
+)
+_PAGE_NOISE = re.compile(
+    r"^(STATE OF NEW YORK|COUNTY -|TOWN\s+-|SWIS\s+-|TAX MAP PARCEL|CURRENT OWNERS"
+    r"|PARCEL SIZE|\s*$)"
+)
+_LEFT_NOISE = re.compile(
+    r"^(MAY BE SUBJECT|UNDER AGDIST|UNDER RPTL|PRIOR OWNER|DEED BOOK|FULL MARKET|EAST-|ACRES"
+    r"|FRNT|BANK)",
+    re.I,
+)
 
 
 def parse_roll(text: str, *, town: str) -> pd.DataFrame:
-    """Parcels from one roll's text: ``[town, parcel, location, owners, street, city, state, zip]``."""
+    """Parcels from one roll's text.
+
+    Columns: ``[town, parcel, location, owners, street, city, state, zip]``.
+    """
     lines = text.splitlines()
     rows = []
     i = 0
@@ -164,8 +176,14 @@ def vt_parcels_as_rolls(vt: pd.DataFrame) -> pd.DataFrame:
         "town": v["TNAME"].str.title(),
         "parcel": v["SPAN"],
         "location": v["E911ADDR"],
-        "owners": [" | ".join(x for x in (a, b) if x) for a, b in zip(v["OWNER1"], v["OWNER2"])],
-        "street": [" ".join(x for x in (a, b) if x).strip() for a, b in zip(v["ADDRGL1"], v["ADDRGL2"])],
+        "owners": [
+            " | ".join(x for x in (a, b) if x)
+            for a, b in zip(v["OWNER1"], v["OWNER2"], strict=True)
+        ],
+        "street": [
+            " ".join(x for x in (a, b) if x).strip()
+            for a, b in zip(v["ADDRGL1"], v["ADDRGL2"], strict=True)
+        ],
         "city": v["CITYGL"].str.title(),
         "state": v["STGL"],
         "zip": v["ZIPGL"].astype(str).str[:5],

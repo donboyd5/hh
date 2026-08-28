@@ -63,6 +63,7 @@ def _donations():
                 "DONATION", PLEDGE_PAYMENT, "DONATION", "DONATION", "DONATION", "DONATION",
             ],
             "donation_status": ["SUCCEEDED"] * 6,
+            "campaign": [None, None, "Annual Fund Drive - 2025-2026", None, None, None],
             "donation_amount": [5.0, 10.0, 500.0, 7.0, 2022.5, 3.0],
             # FY labels: 2024-06-30 -> FY24; 2024-07-01 -> FY25; 2020 -> FY21 (outside window)
             "donation_date": pd.to_datetime(
@@ -124,7 +125,7 @@ def test_predominant_engagement_labels():
 
 def test_pick_contact_most_gifts_then_fallback():
     accounts = _accounts()
-    accounts.loc[3, "deceased"] = True  # exercise the household ANY-flag here
+    accounts.loc[3, "deceased"] = True  # sole member deceased -> household deceased
     out = pick_contact(accounts, _donations()).set_index("id")
     # A1 has two gifts (d1 and the pledge payment d2) vs A2's one -> A1 (Ann) is the
     # contact; her missing email falls back to Bob's, other fields are her own
@@ -137,6 +138,23 @@ def test_pick_contact_most_gifts_then_fallback():
     assert bool(row["do_not_contact"]) is False  # ANY across members: H2's B1 is DNC
     assert bool(out.loc["H2", "do_not_contact"]) is True
     assert bool(out.loc["H3", "deceased"]) is True
+    assert out.loc["H3", "deceased_members"] == "New Person"
+
+
+def test_pick_contact_widow_keeps_household_and_becomes_contact():
+    accounts = _accounts()
+    # A1 (Ann) has the most gifts but has died, and carries Neon's do-not-contact flag as
+    # deceased members do; Bob survives -> household lives, Bob is the contact, not DNC
+    accounts.loc[0, "deceased"] = True
+    accounts.loc[0, "do_not_contact"] = True
+    out = pick_contact(accounts, _donations()).set_index("id")
+    h1 = out.loc["H1"]
+    assert bool(h1["deceased"]) is False
+    assert bool(h1["do_not_contact"]) is False
+    assert h1["contact_first_name"] == "Bob"
+    # deceased_members is built from full_name, which the fixture leaves blank for A1
+    assert h1["deceased_members"] in ("None", "nan")  # str() of the blank full_name
+    assert pd.isna(out.loc["H2", "deceased_members"])
     # address lines concatenate
     assert out.loc["H2", "address"] == "2 Elm St Apt 2"
     assert out.loc["H2", "note_neon"] == "longtime volunteer"
@@ -316,6 +334,13 @@ def test_build_mailing_list_end_to_end():
     assert zed["never_donated"] and zed["predominant_engagement"] == "none"
     assert zed["fst_best_tier"] == "inner circle"
 
+    # letter template per row
+    assert table.loc["Ann & Bob Smith", "letter"] == "donor"
+    assert table.loc["Carol Dane", "letter"] == "donor"
+    assert table.loc["Class Family", "letter"] == "class-family"
+    assert table.loc["New Person", "letter"] == "new-attender"  # no 5-yr gift + new-accounts list
+    assert table.loc["Zed Sponsor", "letter"] == "fst-personal"
+
     # one row per household; sorted campaign gift desc, 5-yr giving desc, class spend desc
     assert table.index.is_unique
     order = table.index.tolist()
@@ -327,7 +352,9 @@ def test_build_mailing_list_end_to_end():
 def test_fst_keep_mask_rule_b():
     fst = pd.DataFrame(
         {
-            "name": ["Friend Once", "Friend Twice", "Inner Once", "Angel 2020", "Angel Back", "Gold"],
+            "name": [
+                "Friend Once", "Friend Twice", "Inner Once", "Angel 2020", "Angel Back", "Gold",
+            ],
             "best_tier": ["friends of fort salem", "friends of fort salem", "inner circle",
                           "opening angels", "opening angels", "gold"],
             "n_years": [1, 2, 1, 1, 2, 1],
@@ -335,3 +362,13 @@ def test_fst_keep_mask_rule_b():
         }
     )
     assert fst_keep_mask(fst).tolist() == [False, True, True, False, True, True]
+
+
+def test_appeal_window_gifts_counts_only_campaign_coded_gifts():
+    from hh.analytics.mailing import appeal_window_gifts
+
+    d = _donations()
+    d.loc[2, "campaign"] = "Misc Donation"  # H2's $500 in the window, not campaign-coded
+    assert appeal_window_gifts(d).empty
+    any_code = appeal_window_gifts(d, campaign=None).set_index("id")
+    assert any_code.loc["H2", "don_appeal_window"] == 500.0
