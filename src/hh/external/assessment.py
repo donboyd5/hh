@@ -176,9 +176,13 @@ def vt_parcels_as_rolls(vt: pd.DataFrame) -> pd.DataFrame:
         "town": v["TNAME"].str.title(),
         "parcel": v["SPAN"],
         "location": v["E911ADDR"],
-        "owners": [" | ".join(x for x in (a, b) if x) for a, b in zip(v["OWNER1"], v["OWNER2"], strict=True)],
+        "owners": [
+            " | ".join(x for x in (a, b) if x)
+            for a, b in zip(v["OWNER1"], v["OWNER2"], strict=True)
+        ],
         "street": [
-            " ".join(x for x in (a, b) if x).strip() for a, b in zip(v["ADDRGL1"], v["ADDRGL2"], strict=True)
+            " ".join(x for x in (a, b) if x).strip()
+            for a, b in zip(v["ADDRGL1"], v["ADDRGL2"], strict=True)
         ],
         "city": v["CITYGL"].str.title(),
         "state": v["STGL"],
