@@ -7,12 +7,16 @@ the first two. Keep it free of personal names — counts and ids only.*
 
 ## Ask
 
-1. **What does the do-not-contact flag mean?** It is set on ~300 living individuals in 280
-   households with $469k of lifetime giving — several of our largest donors — plus ~100
-   company accounts, and also on deceased members. If it is an email opt-out (or an import
-   artifact) rather than "never contact", the records could be cleaned or the flag split
-   into something clearer. *(Already asked in the fall-campaign email; we keep flagged
-   households in the mailing list and just mark them.)*
+1. **What does the do-not-contact flag mean? — ANSWERED (Judy, 2026-08).** The flag is
+   Neon's record of the Constant Contact email opt-out (the two systems are integrated:
+   a CC opt-out flows back into Neon, and new Neon accounts must be opted into CC by hand
+   or bulk update; the same field covers texting, which HH has not used). Reviewing the
+   flagged accounts, Judy found many are old, had mail returned, or asked to be removed —
+   and some are former playbill advertisers whose business stopped. So the flag mixes
+   "no marketing email" (postal mail fine) with genuine "do not mail". **Follow-up:** get
+   Judy's annotated do-not-contact spreadsheet back and split the 18 flagged households
+   on the fall mailing list — keep the email-only opt-outs, drop the returned-mail and
+   removal-request ones.
 2. **Please add Neon ids to exported reports.** The donor and new-accounts workbooks carry
    no Account ID / Household ID columns, so we match people by name and city — 577
    households share a name with another household, and when Neon renames a household
@@ -40,6 +44,19 @@ the first two. Keep it free of personal names — counts and ids only.*
    "Bollywood  Dance" (with a double space), "Bollywood & BollyX", and plain "BollyX"
    event names; a periodic category cleanup in Neon would make its own reports cleaner.
    (We normalize category strings in code since 2026-08-31.)
+
+## Answered from our data (2026-08-31)
+
+- **Accounts without a complete address:** the fall mailing list does *not* exclude them.
+  Two of the 407 appeal households lack a complete address (they will be dropped from the
+  mail merge); 43 of the 75 Fort Salem prospects also lack addresses and get no appeal
+  letter in any case.
+- **"Account type Hubbard Hall":** no such account type exists in the pull — Neon carries
+  only `Individual` (4,873) and `Company` (291). The internal *Hubbard Hall
+  Registrations* company account is not on the mailing list. Two appeal households do
+  include a company member account (a community-services agency and a former playbill
+  advertiser — the case Judy's notes describe); if company-affiliated households should
+  come off the appeal, those two are the ones.
 
 ## Not Neon problems (for the record)
 
