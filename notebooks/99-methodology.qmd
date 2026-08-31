@@ -105,6 +105,12 @@ processed tables in `data/20_processed/` can always be rebuilt.
   purpose, so anything uncategorized surfaces instead of hiding; a real-data test fails if the
   latest pull contains any. The minor rules remain ported from R for now. See
   [Definitions](#definitions) for the categories themselves.
+- **Event indicators.** Beyond the exclusive major category, events carry boolean cross-cutting
+  flags — `is_fundraiser`, `is_youth_program`, `is_film` — because one bucket cannot say "a
+  performance that is also a fundraiser" (Brews & Blues) or "a class that is also a youth
+  program" (the camps). The flags are independent name/category evidence and never change the
+  major category: attendance rows stay summable by major category, and cross-cutting questions
+  filter on the flags.
 - **Manual overrides.** Curated one-off corrections live in `config/overrides.yaml`, kept separate
   from code.
 - **Geographic cleaning.** Addresses are resolved to a point with a documented precision — a real

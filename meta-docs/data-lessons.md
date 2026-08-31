@@ -41,12 +41,13 @@ is the index, not the implementation. Started 2026-08-31; dates mark when a less
 
 ## Neon: events and registrations
 
-- **Event categories carry incidental trailing spaces** ("Visual Arts ") — strip before
-  rule matching or the R-ported rules disagree with their reference output
-  (`categorize/_match.py`).
-- **The categorizer returns `"ERROR"` for unmatched events on purpose** — a tripwire so a
-  new event type surfaces instead of hiding. Check for ERROR after every pull
-  (`categorize/major.py`).
+- **Event category strings arrive with irregular spacing** — incidental trailing spaces
+  ("Visual Arts ") and internal double spaces ("Bollywood  Dance"). Normalize (casefold,
+  collapse whitespace) before any matching (`categorize/major.py:_norm`).
+- **The major categorizer has been ours since 2026-08-31** (informed by the R port it
+  replaced) — documented principles in `categorize/major.py`, cross-cutting indicator
+  flags in `categorize/indicators.py`. It still returns `"ERROR"` for unmatched events on
+  purpose, and a real-data test now fails the build if a pull contains any.
 - **A registration is not a headcount.** A ticket registration averages about two
   attendees; true headcount needs the nested `tickets` arrays flattened
   (`analytics/productions.py` counts real headcount for productions; `analytics/timing.py`
@@ -57,6 +58,10 @@ is the index, not the implementation. Started 2026-08-31; dates mark when a less
   `unmatched_events` for the audit).
 - **Canceled or moved events exist** and are excluded before attendance analysis
   (`analytics/productions.py`).
+- **Event names embed their dates, ages, and status** — "(Ages 8-12)", "Thursdays,
+  September 11 - December 11", "*Class is Full*", "*SOLD OUT*", "CANCELLED". Any
+  name-based grouping must cut at date/weekday tokens and strip status markers
+  (`series_name` in `scripts/attendance_doc.py`).
 - **`eventId` can be missing on registrations** — a per-event sweep recovers records and
   records the fix in `_swept_event_id` (`scripts/sweep_registrations.py`,
   `clean/registrations.py`).
@@ -136,5 +141,9 @@ is the index, not the implementation. Started 2026-08-31; dates mark when a less
 - **Honor Don's hand notes, not Neon staff notes**: staff narratives mention deaths of
   non-account people and contradict themselves; only Don's notes feed the deceased scan,
   and only an explicit survivor phrase rescues a household (`_combined_notes`).
+- **Compile name-matching patterns with `re.I` and test capitalized input** — a pattern
+  written in lowercase silently misses "Young", "Gala", "Ages 8", and the miss is
+  invisible until a capitalized case lands in a test (learned twice in the indicators
+  module, 2026-08-31).
 - **External workbooks get provenance entries** — checksum, size, mtime, and loading
   commit, one entry per file version (`external/provenance.py`).

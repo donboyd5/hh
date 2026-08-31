@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from ..categorize import add_major_minor
+from ..categorize import add_indicators, add_major_minor
 from ..io import load_raw
 from .standardize import standardize_columns
 
@@ -41,4 +41,5 @@ def clean_events(raw: pd.DataFrame | None = None, *, pull_dir=None) -> pd.DataFr
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce")
     df = add_major_minor(df)
+    df = add_indicators(df)
     return df
