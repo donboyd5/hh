@@ -91,6 +91,17 @@ def main() -> None:
     t["total"] = t["classes"] + t["performances_events"] + t["community"]
     trends = t[["classes", "performances_events", "community", "total"]].astype(int)
 
+    # registration dollars on the same grid (gross, as recorded — see the notes)
+    rev = (
+        ok.pivot_table(index="fy", columns="event_majorcat", values="amount",
+                       aggfunc="sum", fill_value=0)
+        .rename(columns={"class": "classes", "performance": "perf"})
+        .reindex(columns=["classes", "perf", "other", "community"], fill_value=0)
+    )
+    rev["performances_events"] = rev.pop("perf") + rev.pop("other")
+    rev["total"] = rev["classes"] + rev["performances_events"] + rev["community"]
+    rev = rev.reindex(trends.index, fill_value=0.0)
+
     lines = [
         "# Attendance — trends and current-year breakdown",
         "",
@@ -101,18 +112,24 @@ def main() -> None:
         "",
         "## Attendance by fiscal year",
         "",
-        "| FY (Jul–Jun) | Classes | Performances & events | Community | Total |",
-        "|---|---:|---:|---:|---:|",
+        "| FY (Jul–Jun) | Classes | Class $ | Performances & events | Perf $ | "
+        "Community | Comm $ | Total | Total $ |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for fy, row in trends.iterrows():
         label = f"FY{fy - 2000}" + (" (partial)" if fy == current_fy else "")
-        lines.append(f"| {label} | {row['classes']:,} | {row['performances_events']:,} "
-                     f"| {row['community']:,} | {row['total']:,} |")
+        rr = rev.loc[fy]
+        lines.append(f"| {label} | {row['classes']:,} | {fmt(rr['classes'])} "
+                     f"| {row['performances_events']:,} | {fmt(rr['performances_events'])} "
+                     f"| {row['community']:,} | {fmt(rr['community'])} "
+                     f"| {row['total']:,} | {fmt(rr['total'])} |")
     lines += [
         "",
         "*Attendees = people (each registration's ticket records, `registrationStatus`",
         "SUCCEEDED), not registration counts — about 1.7 people per registration. Fiscal year",
         f"by event start date; FY{current_fy - 2000} is year-to-date as of the latest pull.",
+        "$ columns are registration revenue as recorded in Neon (gross — canceled sections",
+        "still carry their refunded amounts); ticket and class revenue only, not donations.*",
     ]
     if len(errors):
         n_att = errors["attendees"].sum()
