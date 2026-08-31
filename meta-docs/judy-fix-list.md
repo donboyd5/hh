@@ -47,10 +47,13 @@ the first two. Keep it free of personal names — counts and ids only.*
 
 ## Answered from our data (2026-08-31)
 
-- **Accounts without a complete address:** the fall mailing list does *not* exclude them.
-  Two of the 407 appeal households lack a complete address (they will be dropped from the
-  mail merge); 43 of the 75 Fort Salem prospects also lack addresses and get no appeal
-  letter in any case.
+- **Accounts without a complete address:** the list did not exclude them — and the check
+  surfaced a bug. One of the two address-less appeal rows was the internal cash-drawer
+  account, which had reached the list through the cash gifts booked to it; the pipeline
+  now excludes all internal accounts (cash drawer and the online-registration
+  placeholder) with a regression test. The other is one real donor with nothing on file
+  but a name — Judy may have an address; otherwise they come off the mail merge. 43 of
+  the 75 Fort Salem prospects also lack addresses and get no appeal letter in any case.
 - **"Account type Hubbard Hall":** no such account type exists in the pull — Neon carries
   only `Individual` (4,873) and `Company` (291). The internal *Hubbard Hall
   Registrations* company account is not on the mailing list. Two appeal households do

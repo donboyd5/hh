@@ -30,6 +30,7 @@ by event start date; FY27 is year-to-date as of the latest pull.
 $ columns are registration revenue as recorded in Neon (gross — canceled sections
 still carry their refunded amounts); ticket and class revenue only, not donations.*
 * No uncategorized (ERROR) events in this pull — every event has a rule.
+* 2,265 attendees and $158,865 of the registration dollars sit on Neon's internal accounts (the cash-drawer and online-registration placeholders) — real walk-up tickets, but attached to no household; household-level analyses must exclude them.
 
 ## FY26 breakdown — latest complete year
 
