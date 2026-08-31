@@ -93,8 +93,17 @@ processed tables in `data/20_processed/` can always be rebuilt.
   a swept event id when the registration's own event id is missing.
 - **Event categorization.** Each event is classified into a major category (performance / class /
   community / other) and, for performances, a minor category (theater / music / dance / opera /
-  other) by ordered rules ported from the R project. An event that matches no rule is flagged
-  `ERROR` on purpose, so anything uncategorized surfaces instead of hiding. See
+  other). The major scheme is Hubbard Hall's own (2026-08), informed by the earlier R rules but
+  rewritten against the full event inventory, case-insensitive, and tolerant of Neon's category-name
+  quirks (irregular spacing). Its principles, in order: Neon's own event category is the primary
+  signal; youth-program showcases and recitals count as classes even when filed under a performance
+  category (they are the camp's product, not mainstage programming); ticketed public programming —
+  including film screenings — is a performance; community gatherings (breakfasts, dinners, forums,
+  exhibits and lectures) are community; and galas, fundraisers, auditions, and uncategorized
+  miscellany are other, except fundraisers that are essentially concerts (Brews & Blues, the
+  cabaret nights), which are performances. An event that matches no rule is flagged `ERROR` on
+  purpose, so anything uncategorized surfaces instead of hiding; a real-data test fails if the
+  latest pull contains any. The minor rules remain ported from R for now. See
   [Definitions](#definitions) for the categories themselves.
 - **Manual overrides.** Curated one-off corrections live in `config/overrides.yaml`, kept separate
   from code.

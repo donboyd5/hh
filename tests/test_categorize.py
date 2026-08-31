@@ -4,31 +4,54 @@ from hh.categorize import add_major_minor, assign_major, assign_minor, categoriz
 
 # (category, event_name, expected_major)
 MAJOR_CASES = [
-    (None, "Whispering Bones", "performance"),  # exact-name rule
+    # exact-name list (mostly past events with no Neon category)
+    (None, "Whispering Bones", "performance"),
+    ("Mystery Category", "Whispering Bones", "performance"),  # exact name wins
+    # concert-shaped fundraisers are performances (principle 5's exception)
+    ("Fundraising Events", "Brews & Blues Night", "performance"),
+    (None, "A Christmas Carol", "performance"),
+    # performance categories
     ("Performances", "Hamlet", "performance"),
-    ("Performances", "Dance Mob", "class"),  # class exception overrides performance category
-    ("Dance Performances", "The Nutcracker", "performance"),
-    ("Dance Performances", "Young Dancer Recital", "class"),  # dance exception
     ("Theater Performances", "Hamlet", "performance"),
-    ("Theater Performances", "Teen Theater Spring", "class"),  # theater exception
     ("Music Performances", "Symphony", "performance"),
     ("Shakespeare", "x", "performance"),
     ("Opera Performances", "x", "performance"),
+    ("Dance Performances", "The Nutcracker", "performance"),
+    # our call (principle 3): a screening people buy tickets to is a performance
+    ("Film Screenings", "Manhattan Short Film Festival", "performance"),
+    # principle 2: youth-program showcases are classes, in any performance category
+    ("Performances", "Dance Mob", "class"),
+    ("Performances", "Playing Shakespeare - Teen Theater Showcase", "class"),
+    ("Theater Performances", "Teen Theatre Spring", "class"),
+    ("Music Performances", "Hubbard Hall Youth Chorale Spring Sing", "class"),
+    ("Dance Performances", "Young Dancer Recital", "class"),
+    ("Dance Performances", "Dance Showcase", "class"),
+    # class categories — including the two that were ERROR before the 2026-08-31 rewrite
+    ("Classes", "x", "class"),
+    ("Weekly Classes", "x", "class"),
     ("Ballet", "x", "class"),
-    ("Tap Dance", "x", "class"),
-    ("Pilates/Yoga", "x", "class"),
-    ("Martial Arts", "x", "class"),  # category substring rule
+    ("Bollywood  Dance", "x", "class"),  # Neon's double-space spelling; _norm collapses
+    ("Bollywood & BollyX", "x", "class"),
+    ("Sword Fencing", "x", "class"),
+    ("Martial Arts Karate", "x", "class"),
+    ("Workshops - Children", "x", "class"),  # substring families cover future labels
+    ("Pottery Classes", "x", "class"),
     ("Children's Theater", "x", "class"),
-    ("Chorale", "x", "class"),
-    (None, "Morning Yoga", "class"),  # NA category + class_patterns_na
-    (None, "Teen Showcase Night", "class"),  # NA + Teen & Showcase
+    # community
     ("Community Events", "x", "community"),
+    ("Dinners", "x", "community"),
+    ("Exhibits, Films & Lectures", "x", "community"),  # exhibits/lectures stay community
     ("Home & Garden", "x", "community"),
-    (None, "Holiday Breakfast With Santa", "community"),  # community pattern in name
-    ("Fundraising Events", "x", "other"),
+    ("Fundraising Events", "Community Potluck Fundraiser", "community"),  # name fallback
+    (None, "Holiday Breakfast With Santa", "community"),
+    # other
+    ("Fundraising Events", "Spring Fundraiser", "other"),
     ("Auditions", "x", "other"),
-    (None, "Random Unmatched Event", "other"),  # NA -> other
-    ("Mystery Category", "Spring Gala", "other"),  # Gala in name
+    ("Special Events", "x", "other"),
+    (None, "Random Unmatched Event", "other"),  # no category -> other
+    (None, "Morning Yoga", "class"),  # no category + known class pattern
+    (None, "Teen Showcase Night", "class"),  # no category + teen AND showcase
+    ("Mystery Category", "Annual Gala", "other"),  # unknown category + gala name
     ("Mystery Category", "Plain Name", "ERROR"),  # tripwire
 ]
 
@@ -37,6 +60,11 @@ def test_assign_major():
     for category, name, expected in MAJOR_CASES:
         got = assign_major(category, name)
         assert got == expected, f"{category!r}/{name!r} -> {got!r}, expected {expected!r}"
+
+
+def test_assign_major_is_case_insensitive():
+    assert assign_major("FUNDRAISING EVENTS", "ANNUAL GALA") == "other"
+    assert assign_major("music performances", "spring sing") == "performance"
 
 
 # (category, event_name, major, expected_minor)
