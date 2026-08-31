@@ -7,26 +7,28 @@ Aggregate numbers only.*
 
 ## Attendance by fiscal year
 
-| FY (Jul–Jun) | Classes | Performances & events | Community | Total |
-|---|---:|---:|---:|---:|
-| FY14 | 596 | 2,459 | 100 | 3,155 |
-| FY15 | 1,209 | 2,818 | 335 | 4,362 |
-| FY16 | 1,364 | 2,832 | 314 | 4,510 |
-| FY17 | 1,766 | 2,679 | 308 | 4,753 |
-| FY18 | 2,478 | 2,948 | 221 | 5,647 |
-| FY19 | 2,705 | 1,603 | 276 | 4,584 |
-| FY20 | 1,388 | 1,283 | 192 | 2,863 |
-| FY21 | 390 | 645 | 41 | 1,076 |
-| FY22 | 1,032 | 763 | 58 | 1,853 |
-| FY23 | 2,207 | 1,662 | 0 | 3,869 |
-| FY24 | 2,212 | 1,214 | 67 | 3,493 |
-| FY25 | 1,246 | 2,221 | 134 | 3,601 |
-| FY26 | 1,071 | 2,589 | 150 | 3,810 |
-| FY27 (partial) | 246 | 749 | 0 | 995 |
+| FY (Jul–Jun) | Classes | Class $ | Performances & events | Perf $ | Community | Comm $ | Total | Total $ |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| FY14 | 596 | $65,871 | 2,459 | $42,229 | 100 | $3,755 | 3,155 | $111,855 |
+| FY15 | 1,209 | $97,202 | 2,818 | $71,070 | 335 | $8,255 | 4,362 | $176,526 |
+| FY16 | 1,364 | $92,445 | 2,832 | $69,972 | 314 | $8,072 | 4,510 | $170,489 |
+| FY17 | 1,766 | $96,018 | 2,679 | $70,530 | 308 | $5,730 | 4,753 | $172,279 |
+| FY18 | 2,478 | $115,648 | 2,948 | $89,730 | 221 | $6,589 | 5,647 | $211,966 |
+| FY19 | 2,705 | $109,800 | 1,603 | $54,277 | 276 | $3,863 | 4,584 | $167,940 |
+| FY20 | 1,388 | $84,025 | 1,283 | $37,548 | 192 | $2,660 | 2,863 | $124,234 |
+| FY21 | 390 | $43,043 | 645 | $17,335 | 41 | $410 | 1,076 | $60,788 |
+| FY22 | 1,032 | $46,940 | 763 | $16,985 | 58 | $0 | 1,853 | $63,925 |
+| FY23 | 2,207 | $79,094 | 1,662 | $36,195 | 0 | $0 | 3,869 | $115,289 |
+| FY24 | 2,212 | $91,515 | 1,214 | $26,406 | 67 | $780 | 3,493 | $118,701 |
+| FY25 | 1,246 | $97,375 | 2,221 | $66,141 | 134 | $1,937 | 3,601 | $165,453 |
+| FY26 | 1,071 | $97,215 | 2,589 | $81,782 | 150 | $2,241 | 3,810 | $181,238 |
+| FY27 (partial) | 246 | $44,088 | 749 | $9,275 | 0 | $0 | 995 | $53,363 |
 
 *Attendees = people (each registration's ticket records, `registrationStatus`
 SUCCEEDED), not registration counts — about 1.7 people per registration. Fiscal year
 by event start date; FY27 is year-to-date as of the latest pull.
+$ columns are registration revenue as recorded in Neon (gross — canceled sections
+still carry their refunded amounts); ticket and class revenue only, not donations.*
 * No uncategorized (ERROR) events in this pull — every event has a rule.
 
 ## FY26 breakdown — latest complete year
