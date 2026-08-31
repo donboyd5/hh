@@ -31,11 +31,13 @@ is the index, not the implementation. Started 2026-08-31; dates mark when a less
   A household is dropped only when *every* member is deceased; a surviving spouse keeps it
   and becomes the contact. This cost six widows who gave to the 2025 campaign before it
   was fixed (2026-08-28; `pick_contact` and `apply_exclusions` in `analytics/mailing.py`).
-- **`do_not_contact` cannot mean "never contact"**: it sits on ~300 living individuals in
-  280 households with $469k of lifetime giving — several of the largest donors — plus
-  ~100 company accounts, and on deceased members. Judged on living members only; likely an
-  email opt-out or import artifact (Judy to confirm). Kept and flagged, never silently
-  dropped (`apply_exclusions`; do-not-contact sheet in the workbook).
+- **`do_not_contact` is the Constant Contact email opt-out** (Neon and CC are integrated;
+  CC opt-outs flow back, new accounts are opted in by hand — Judy, 2026-08). But her
+  review found the flag also covers old accounts, returned mail, removal requests, and
+  former playbill advertisers — so it mixes "no email" with "no mail at all"; the split
+  lives in her annotated spreadsheet, not in Neon. It also sits on deceased members and
+  ~100 company accounts. Judged on living members only; kept and flagged on the mailing
+  list, never silently dropped (`apply_exclusions`; do-not-contact sheet in the workbook).
 - **Account 36805 is a known junk account** — excluded from donor analytics
   (`analytics/donors.py`).
 
