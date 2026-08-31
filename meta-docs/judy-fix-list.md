@@ -54,12 +54,30 @@ the first two. Keep it free of personal names — counts and ids only.*
   placeholder) with a regression test. The other is one real donor with nothing on file
   but a name — Judy may have an address; otherwise they come off the mail merge. 43 of
   the 75 Fort Salem prospects also lack addresses and get no appeal letter in any case.
+  **RESOLVED (Judy, 2026-08):** she merged the account into the donor's existing
+  household and added the address. The merge postdates our 2026-08-27 pull, so it lands
+  on the next one and the mailing list picks them up automatically. (Verified in the
+  pull: the husband's own last gift was $250 to the 2017 Opera Match; the $500 drive
+  gift that had put the account on the list was the wife's, March 2023. The household's
+  tradition is giving in honor of two long-time members.)
 - **"Account type Hubbard Hall":** no such account type exists in the pull — Neon carries
   only `Individual` (4,873) and `Company` (291). The internal *Hubbard Hall
   Registrations* company account is not on the mailing list. Two appeal households do
   include a company member account (a community-services agency and a former playbill
   advertiser — the case Judy's notes describe); if company-affiliated households should
   come off the appeal, those two are the ones.
+
+## New finds (2026-08-31)
+
+9. **Credit-card processing fees are recorded as donations.** The campaign *Misc.
+   Donation - CC Processing Fees* holds 425 SUCCEEDED "gifts" totaling $1,065 across 270
+   households (Dec 2020 – Jun 2023), mostly under $5. Trivial money, but they make 270
+   households look like donors — some would show as donors *only* because of a fee
+   record. Can these be reclassified or excluded from donor reports?
+10. **Three exact duplicate gifts** (same household, amount, date): two $25 gifts on
+    2025-12-30 inside the current fall drive, and two $100 pairs from Jan 2012 and
+    Jan 2013. Small dollars, but the current-drive pair double-counts one household's
+    gift.
 
 ## Not Neon problems (for the record)
 
