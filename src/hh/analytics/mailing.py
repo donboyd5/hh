@@ -31,7 +31,7 @@ import re
 import numpy as np
 import pandas as pd
 
-from ..analytics.donors import succeeded_individual_gifts
+from ..analytics.donors import INTERNAL_ACCOUNT_IDS, succeeded_individual_gifts
 
 FY_MONTH = 7  # fiscal year starts July 1
 
@@ -478,6 +478,14 @@ def build_mailing_list(
     gave_5yr = set(gifts_fy.loc[gifts_fy[DON_FY_COLUMNS].sum(axis=1) > 0, "id"])
     engaged_ids = set(spend_5fy[spend_5fy >= MIN_ENGAGED_NONDONOR_SPEND].index) - gave_5yr
     ids = donor5_ids | d3_ids | na_ids | silent_ids | resp_ids | appeal_gift_ids | engaged_ids
+    # internal house accounts (cash drawer, online-registration placeholder) are not
+    # households — nothing to mail (the cash account reached the list via its recorded
+    # gifts until 2026-08-31, when Judy's address question surfaced it)
+    internal = set(
+        accounts.loc[accounts["account_id"].isin(INTERNAL_ACCOUNT_IDS), "id"]
+        .dropna().astype(str)
+    )
+    ids -= internal
 
     # -- base rows: every household from any source, even with no in-window gifts ---
     # (gifts_by_fy only holds households with in-window gifts; a listed household with
