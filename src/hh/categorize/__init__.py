@@ -6,15 +6,22 @@ informed by the R project's rules; see :mod:`.major` for the principles. Uncateg
 
 minor (splits performance): dance / music / theater / opera / other — still the R-ported
 rules; a first pass of our own is a natural follow-up once the major scheme settles.
+
+Cross-cutting indicators (fundraiser / youth program / film) live in :mod:`.indicators`:
+additive boolean dimensions on top of the exclusive major category.
 """
 from __future__ import annotations
 
 import pandas as pd
 
+from .indicators import add_indicators, assign_indicators
 from .major import assign_major
 from .minor import assign_minor
 
-__all__ = ["assign_major", "assign_minor", "categorize_event", "add_major_minor"]
+__all__ = [
+    "assign_major", "assign_minor", "categorize_event", "add_major_minor",
+    "assign_indicators", "add_indicators",
+]
 
 
 def categorize_event(category, event_name) -> tuple[str, str]:

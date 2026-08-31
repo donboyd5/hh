@@ -107,3 +107,47 @@ def test_add_major_minor_adds_columns():
     assert list(out["event_minorcat"]) == ["theater", "other", "other", "theater"]
     # original df unchanged
     assert "event_majorcat" not in df.columns
+
+
+# (category, event_name, expected indicators)
+INDICATOR_CASES = [
+    # a performance that is also a fundraiser — the case one category can't express
+    ("Fundraising Events", "Brews & Blues Fundraiser",
+     {"is_fundraiser": True, "is_youth_program": False, "is_film": False}),
+    (None, "Miscast Cabaret -- Fundraiser",
+     {"is_fundraiser": True, "is_youth_program": False, "is_film": False}),
+    ("Fundraising Events", "2026 Hubbard Hall Gala: The Rites of Spring",
+     {"is_fundraiser": True, "is_youth_program": False, "is_film": False}),
+    # a youth recital with youth evidence and "gala" in the name is not a fundraiser;
+    # without youth evidence a "gala" name still flags (documented limitation)
+    ("Dance Performances", "Young Dancer Gala Recital",
+     {"is_fundraiser": False, "is_youth_program": True, "is_film": False}),
+    ("Dance Performances", "Applause at 7pm: Gala Dance Performance",
+     {"is_fundraiser": True, "is_youth_program": False, "is_film": False}),
+    # youth programming: keywords and age floors of 15 or below
+    ("Theater Performances", "Honk JR - Youth Theatre Performance - Friday",
+     {"is_fundraiser": False, "is_youth_program": True, "is_film": False}),
+    ("Weekly Classes", "Hip Hop 1 (Ages 8 - 12) - Mondays",
+     {"is_fundraiser": False, "is_youth_program": True, "is_film": False}),
+    ("Weekly Classes", "Sword Fencing - Beginner (ages 11+)",
+     {"is_fundraiser": False, "is_youth_program": True, "is_film": False}),
+    # adult classes do not flag: age floor 16+
+    ("Weekly Classes", "Gyrokinesis Sit Down & Shape Up! (Ages 16 & Up)",
+     {"is_fundraiser": False, "is_youth_program": False, "is_film": False}),
+    ("Weekly Classes", "Adult Drawing with Darcy (Ages 20 and up)",
+     {"is_fundraiser": False, "is_youth_program": False, "is_film": False}),
+    # film
+    ("Film Screenings", "Manhattan Short Film Festival",
+     {"is_fundraiser": False, "is_youth_program": False, "is_film": True}),
+    # plain events carry no flags
+    ("Theater Performances", "Hamlet",
+     {"is_fundraiser": False, "is_youth_program": False, "is_film": False}),
+]
+
+
+def test_assign_indicators():
+    from hh.categorize import assign_indicators
+
+    for category, name, expected in INDICATOR_CASES:
+        got = assign_indicators(category, name)
+        assert got == expected, f"{category!r}/{name!r} -> {got}, expected {expected}"

@@ -49,7 +49,8 @@ def clean_registrations(
     if events is not None and "event_id" in df.columns and "event_id" in events.columns:
         cols = [
             c
-            for c in ("event_majorcat", "event_minorcat", "event_name", "starts_on")
+            for c in ("event_majorcat", "event_minorcat", "event_name", "starts_on",
+                      "is_fundraiser", "is_youth_program", "is_film")
             if c in events.columns
         ]
         ev = (
