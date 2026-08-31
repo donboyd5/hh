@@ -27,7 +27,7 @@ CLASS_FAMILIES: list[tuple[str, str]] = [
     ("Youth-theatre showcases (ticketed performances of the camps)",
      r"performance\s*-"),
     ("Summer camps & children's theatre",
-     r"camp|afternoon arts|children'?s theatre|children'?s theater|teen theat(re|er)|youth theat(re|er)"),
+     r"camp|afternoon arts|children'?s theat(er|re)|teen theat(er|re)|youth theat(er|re)"),
     ("Yoga, wellness & fitness",
      r"yoga|gyrokinesis|wellness|strength|balance|fitness|pilates"),
     ("Dance (ballet, tap, jazz)", r"ballet|tap|jazz"),
@@ -45,13 +45,16 @@ _MONTH = (r"(?:january|february|march|april|may|june|july|august|september|octob
 _DATEISH = re.compile(rf"\s*,?\s*\b(?:{_WEEKDAY}|{_MONTH})\b|\b\d{{4}}\b", re.I)
 
 
+_TRAIL = re.compile(r"^[\s.*\-—,]+|[\s.*\-—,]+$")
+
+
 def series_name(name: str) -> str:
     """Collapse an event's sections into a series title (drop ages, dates, weekdays)."""
     s = re.split(r"\s*\(", name)[0]  # "(Ages …)" and everything after
     s = re.split(r"\s+-\s+Week\s+\d", s)[0]  # Afternoon Arts weeks
     s = re.split(_DATEISH, s)[0]  # first date/weekday token
     s = re.sub(r"\s*\*?\*?(Cancelled|CANCELED|Class is Full|SOLD OUT).*", "", s, flags=re.I)
-    return s.strip(" .-*—-,") or name
+    return _TRAIL.sub("", s) or name
 
 
 def class_family(name: str) -> str:
@@ -112,9 +115,10 @@ def main() -> None:
         f"by event start date; FY{current_fy - 2000} is year-to-date as of the latest pull.",
     ]
     if len(errors):
-        lines.append(f"* **{len(errors)} registrations ({errors['attendees'].sum():,.0f} attendees) "
-                     "are in the ERROR category and excluded — new event types the rules don't "
-                     "know; categorize them before trusting these rows.**")
+        n_att = errors["attendees"].sum()
+        lines.append(f"* **{len(errors)} registrations ({n_att:,.0f} attendees) are in the "
+                     "ERROR category and excluded — new event types the rules don't know; "
+                     "categorize them before trusting these rows.**")
     else:
         lines.append("* No uncategorized (ERROR) events in this pull — every event has a rule.")
 
@@ -153,9 +157,8 @@ def main() -> None:
         for s, row in g.sort_values("att", ascending=False).iterrows():
             lines.append(f"| — {s} | {row['sec']:.0f} | {row['att']:.0f} | {fmt(row['dol'])} |")
     canceled = cls[cls["att"] == 0]
-    lines += [
-        f"| **TOTAL CLASSES** | **{len(cls)}** | **{cls['att'].sum():,.0f}** | **{fmt(cls['dol'].sum())}** |",
-    ]
+    lines.append(f"| **TOTAL CLASSES** | **{len(cls)}** | **{cls['att'].sum():,.0f}** "
+                 f"| **{fmt(cls['dol'].sum())}** |")
     if len(canceled):
         lines.append(
             f"\n*Canceled sections: {len(canceled)} events, 0 attendees, "
@@ -187,7 +190,8 @@ def main() -> None:
         if sub.empty:
             continue
         g = sub.groupby("prod").agg(n=("event_id", "count"), att=("att", "sum"), dol=("dol", "sum"))
-        lines.append(f"| **{label}** | | **{sub['att'].sum():,.0f}** | **{fmt(sub['dol'].sum())}** |")
+        att, dol = sub["att"].sum(), sub["dol"].sum()
+        lines.append(f"| **{label}** | | **{att:,.0f}** | **{fmt(dol)}** |")
         for p, row in g.sort_values("att", ascending=False).iterrows():
             lines.append(f"| — {p} | {row['n']:.0f} | {row['att']:.0f} | {fmt(row['dol'])} |")
     if len(other):
@@ -212,7 +216,8 @@ def main() -> None:
     ]
     for _, row in com.sort_values("att", ascending=False).iterrows():
         lines.append(f"| — {row['name']} | {row['att']:.0f} | {fmt(row['dol'])} |")
-    lines += [f"| **TOTAL COMMUNITY** | **{com['att'].sum():,.0f}** | **{fmt(com['dol'].sum())}** |"]
+    com_att, com_dol = com["att"].sum(), com["dol"].sum()
+    lines.append(f"| **TOTAL COMMUNITY** | **{com_att:,.0f}** | **{fmt(com_dol)}** |")
 
     lines += [
         "",
