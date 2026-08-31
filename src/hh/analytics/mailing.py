@@ -311,7 +311,7 @@ def apply_exclusions(
       since the mail then goes to the surviving partner.
     - **Do-not-contact**: flagged, NOT dropped by default. Judged on living members only
       (Neon also sets the flag on deceased members). It sits on ~300 living individuals in
-      280 households with $469k of lifetime giving — Dorothy Ashton, the Neubohns, Katz,
+      280 households with $469k of lifetime giving — Dotty Ashton, the Neubohns, Katz,
       Merrill — plus ~100 company accounts, so it cannot mean "never contact"
       (2026-08-28; likely an email opt-out or import artifact — Judy to confirm).
       ``drop_do_not_contact=True`` drops them once the flag's meaning is settled; the QA
