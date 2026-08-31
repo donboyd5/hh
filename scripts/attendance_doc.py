@@ -17,6 +17,7 @@ import re
 import pandas as pd
 
 from hh import io
+from hh.analytics.donors import INTERNAL_ACCOUNT_IDS
 from hh.analytics.mailing import fiscal_year
 from hh.analytics.productions import count_succeeded_attendees, match_production
 
@@ -138,6 +139,13 @@ def main() -> None:
                      "categorize them before trusting these rows.**")
     else:
         lines.append("* No uncategorized (ERROR) events in this pull — every event has a rule.")
+    internal = ok[ok["account_id"].isin(INTERNAL_ACCOUNT_IDS)]
+    if len(internal):
+        n_att, dol = internal["attendees"].sum(), internal["amount"].sum()
+        lines.append(f"* {n_att:,.0f} attendees and {fmt(dol)} of the registration dollars sit "
+                     "on Neon's internal accounts (the cash-drawer and online-registration "
+                     "placeholders) — real walk-up tickets, but attached to no household; "
+                     "household-level analyses must exclude them.")
 
     # ---- breakdown of the latest complete FY ------------------------------------
     fy = ok[ok["fy"] == latest_complete].copy()
