@@ -1,7 +1,11 @@
-"""Two-stage event categorization (port of R logic).
+"""Two-stage event categorization.
 
-major: performance / class / community / other  (uncategorized -> "ERROR" tripwire)
-minor (splits performance): dance / music / theater / opera / other
+major: performance / class / community / other — Hubbard Hall's own scheme (2026-08-31),
+informed by the R project's rules; see :mod:`.major` for the principles. Uncategorized
+-> "ERROR" tripwire.
+
+minor (splits performance): dance / music / theater / opera / other — still the R-ported
+rules; a first pass of our own is a natural follow-up once the major scheme settles.
 """
 from __future__ import annotations
 
@@ -33,6 +37,6 @@ def add_major_minor(
     pairs = [
         categorize_event(c, n) for c, n in zip(out[category_col], out[name_col], strict=True)
     ]
-    out[major_col] = [major for major, _ in pairs]
-    out[minor_col] = [minor for _, minor in pairs]
+    out[major_col] = [p[0] for p in pairs]
+    out[minor_col] = [p[1] for p in pairs]
     return out

@@ -1,9 +1,9 @@
 """Clean raw Neon events (from the API) into a standardized, categorized table.
 
 Maps the API's output-field names to the project's standard names, parses types, and applies the
-two-stage categorizer (major/minor) ported from R. Category values come straight from Neon, so
-running this on live data is the real test of whether the R-ported rules still apply (de novo from
-API data, per the project directive).
+two-stage categorizer: major is Hubbard Hall's own scheme (2026-08-31, informed by the earlier R
+port — see ``hh.categorize.major``), minor remains R-ported. Category values come straight from
+Neon, so running this on live data is the real test of whether the rules still apply.
 """
 from __future__ import annotations
 
