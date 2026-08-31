@@ -338,7 +338,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <p>The raw data is pulled from the <strong>Neon CRM REST API (v2)</strong> and saved exactly as Neon returns it. There are four entities, and every record retrieved streams straight to disk — analysis never depends on the live API.</p>
 <ul>
 <li><strong>Accounts</strong> — every constituent: donors, ticket-buyers, and class-takers, as individuals and households. One row per Neon account. Carries identity (account id, account type, first / last / full / company name), household membership (household id and name), mailing address (street, city, state, ZIP, country), contact info (email, phone), and the <strong>deceased</strong> and <strong>do-not-contact</strong> flags used to filter people out.</li>
-<li><strong>Donations</strong> — every gift. One row per donation, tied to an account by account id. Carries amount, date, type (<code>DONATION</code> or <code>PLEDBGEPAYMENT</code>), status (e.g.&nbsp;<code>SUCCEEDED</code>), and fund / campaign / purpose / source. It carries no household id; that link is recovered during cleaning.</li>
+<li><strong>Donations</strong> — every gift. One row per donation, tied to an account by account id. Carries amount, date, type (<code>DONATION</code> or <code>PLEDGEPAYMENT</code>), status (e.g.&nbsp;<code>SUCCEEDED</code>), and fund / campaign / purpose / source. It carries no household id; that link is recovered during cleaning.</li>
 <li><strong>Events</strong> — every scheduled event: a single performance, class, or community happening. One row per Neon event. Carries the event name, Neon’s event category, start and end dates, capacity, and Neon’s attendee count. There is no field linking the nights of a multi-night run; runs are reconstructed later.</li>
 <li><strong>Registrations</strong> — every ticket / registration purchase, linking an account to an event. One row per registration, with nested ticket and attendee records (used to count true headcount). Carries the registrant’s account id, amount, date-time, and source / origin.</li>
 </ul>
@@ -379,25 +379,25 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <tr class="odd">
 <th data-quarto-table-cell-role="th">0</th>
 <td>accounts</td>
-<td>5094</td>
+<td>5164</td>
 <td>Constituents — donors, patrons, class-takers (...</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">1</th>
 <td>donations</td>
-<td>8912</td>
+<td>9092</td>
 <td>Gifts, one per donation</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">2</th>
 <td>events</td>
-<td>2564</td>
+<td>2604</td>
 <td>Scheduled events — one performance, class, or ...</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">3</th>
 <td>registrations</td>
-<td>27371</td>
+<td>28042</td>
 <td>Ticket/registration purchases linking an accou...</td>
 </tr>
 </tbody>
@@ -419,7 +419,8 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <li><strong>Flag conversion.</strong> The deceased and do-not-contact text fields (<code>"Yes"</code>) become real booleans.</li>
 <li><strong>Household rollup.</strong> Every analytic record gets a canonical household id, name, and group (<code>hh.clean.households.add_rollup</code>): <code>id</code> is the household id when Neon assigns one, otherwise the account id; <code>group</code> is <code>household</code>, <code>account</code>, or <code>other</code>; <code>name</code> is the first non-empty of household name, full name, or company name.</li>
 <li><strong>Recovering links the API omits.</strong> Donations carry an account id but no household id, so household membership is recovered by joining the cleaned accounts on account id. Registrations likewise join accounts (for the household) and events (for the event’s category), and fall back to a swept event id when the registration’s own event id is missing.</li>
-<li><strong>Event categorization.</strong> Each event is classified into a major category (performance / class / community / other) and, for performances, a minor category (theater / music / dance / opera / other) by ordered rules ported from the R project. An event that matches no rule is flagged <code>ERROR</code> on purpose, so anything uncategorized surfaces instead of hiding. See <a href="#definitions">Definitions</a> for the categories themselves.</li>
+<li><strong>Event categorization.</strong> Each event is classified into a major category (performance / class / community / other) and, for performances, a minor category (theater / music / dance / opera / other). The major scheme is Hubbard Hall’s own (2026-08), informed by the earlier R rules but rewritten against the full event inventory, case-insensitive, and tolerant of Neon’s category-name quirks (irregular spacing). Its principles, in order: Neon’s own event category is the primary signal; youth-program showcases and recitals count as classes even when filed under a performance category (they are the camp’s product, not mainstage programming); ticketed public programming — including film screenings — is a performance; community gatherings (breakfasts, dinners, forums, exhibits and lectures) are community; and galas, fundraisers, auditions, and uncategorized miscellany are other, except fundraisers that are essentially concerts (Brews &amp; Blues, the cabaret nights), which are performances. An event that matches no rule is flagged <code>ERROR</code> on purpose, so anything uncategorized surfaces instead of hiding; a real-data test fails if the latest pull contains any. The minor rules remain ported from R for now. See <a href="#definitions">Definitions</a> for the categories themselves.</li>
+<li><strong>Event indicators.</strong> Beyond the exclusive major category, events carry boolean cross-cutting flags — <code>is_fundraiser</code>, <code>is_youth_program</code>, <code>is_film</code> — because one bucket cannot say “a performance that is also a fundraiser” (Brews &amp; Blues) or “a class that is also a youth program” (the camps). The flags are independent name/category evidence and never change the major category: attendance rows stay summable by major category, and cross-cutting questions filter on the flags.</li>
 <li><strong>Manual overrides.</strong> Curated one-off corrections live in <code>config/overrides.yaml</code>, kept separate from code.</li>
 <li><strong>Geographic cleaning.</strong> Addresses are resolved to a point with a documented precision — a real street address first, then a household member’s street address for PO-box accounts, then a ZIP centroid as a last resort, and <code>unmapped</code> if nothing works (see <a href="#geography">Geography</a>). PO-box-only households are flagged so the tight distance counts stay honest.</li>
 </ul>
@@ -429,7 +430,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <p>How we select and define the people and events in this book. Every definition rolls a constituent up to their household first (see <a href="#data-cleaning">Data cleaning</a>); person-level counts are at the household level.</p>
 <ul>
 <li><strong>Household.</strong> The analytic unit: the household id when Neon assigns one, otherwise the single account id. A person in a Neon household is counted once with their housemates; a standalone account is its own household.</li>
-<li><strong>Donor.</strong> A household whose total succeeded individual gifts are greater than zero. A gift counts when its status is <code>SUCCEEDED</code>, its type is <code>DONATION</code> or <code>PLEDBGEPAYMENT</code>, and the account is an <code>Individual</code>; we then drop gifts from accounts marked deceased or do-not-contact, and a known junk account (<code>36805</code>). Variables used: <code>donation_amount</code>, <code>donation_status</code>, <code>donation_type</code>, <code>account_type</code>, <code>deceased</code>, <code>do_not_contact</code>.</li>
+<li><strong>Donor.</strong> A household whose total succeeded individual gifts are greater than zero. A gift counts when its status is <code>SUCCEEDED</code>, its type is <code>DONATION</code> or <code>PLEDGEPAYMENT</code>, and the account is an <code>Individual</code>; we then drop gifts from accounts marked deceased or do-not-contact, and a known junk account (<code>36805</code>). Variables used: <code>donation_amount</code>, <code>donation_status</code>, <code>donation_type</code>, <code>account_type</code>, <code>deceased</code>, <code>do_not_contact</code>.</li>
 <li><strong>Patron.</strong> A household with one or more performance registrations (<code>is_patron = n_performance &gt; 0</code>).</li>
 <li><strong>Class-taker.</strong> A household with one or more class registrations (<code>is_class_taker = n_class &gt; 0</code>).</li>
 <li><strong>Major category (performance / class / community / other).</strong> Assigned from Neon’s event category and the event name, in order, first match wins. For example, an event in a <code>Performances</code>, <code>Theater Performances</code>, <code>Music Performances</code>, or <code>Opera Performances</code> category is a performance (with a few named exceptions that are really classes); events in class or community categories fall to those buckets; anything unmatched is <code>other</code>. An event matching no rule at all is flagged <code>ERROR</code> as a tripwire.</li>
@@ -449,7 +450,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <ul>
 <li><strong>Annual giving tiers.</strong> A household’s giving in a single year is placed in one of four bands: <strong>&lt;$100</strong>, <strong>$100–999</strong>, <strong>$1,000–4,999</strong>, or <strong>$5,000+</strong>. These drive the over-time and persistence chapters. A household is counted once per year it gives (so a multi-year donor appears in several years).</li>
 <li><strong>Lifetime tiers.</strong> Cumulative giving uses the same bands; households giving <strong>$1,000+</strong> lifetime are “large donors” and <strong>$5,000+</strong> are “major donors.” These drive the preferences chapter, where lifetime giving measures the depth of the relationship.</li>
-<li><strong>Donor basis.</strong> Size and persistence start from <code>succeeded_individual_gifts</code> (status <code>SUCCEEDED</code>, type <code>DONATION</code>/<code>PLEDBGEPAYMENT</code>, account type <code>Individual</code>) rolled up to the household — the same basis as <code>households_summary.total_donations</code>, so the figures reconcile with the headline donor counts.</li>
+<li><strong>Donor basis.</strong> Size and persistence start from <code>succeeded_individual_gifts</code> (status <code>SUCCEEDED</code>, type <code>DONATION</code>/<code>PLEDGEPAYMENT</code>, account type <code>Individual</code>) rolled up to the household — the same basis as <code>households_summary.total_donations</code>, so the figures reconcile with the headline donor counts.</li>
 <li><strong>Retention.</strong> Of households that gave in year Y, the share that also gave in Y+1. The retention table drops the final year (it has no “next year”), and the trend drops the row whose next year is the partial current year. Retention is an <strong>upper bound on voluntary churn</strong>: a donor who has died also appears as “not retained.”</li>
 <li><strong>Partial years.</strong> The current calendar year is year-to-date and is left out of every over-time trend; where its figure is shown, it is labeled year-to-date and will rise as the year fills out.</li>
 </ul>
@@ -459,7 +460,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <p>The <a href="10-appeal-response.html">appeal chapter</a> compares households that were mailed the fall 2025 annual appeal with those that were not.</p>
 <ul>
 <li><strong>Who was appealed</strong> comes from the development office’s appeal workbook (three sheets: segmented top prospects, general list, theater artists), which carries Neon account ids; recipients are mapped to households through the current Neon accounts. Subtotal rows, duplicate rows, and placeholder rows are dropped on load; a handful of recipients with no id at all are excluded from household-level rates.</li>
-<li><strong>Responded</strong> means at least one SUCCEEDED <code>DONATION</code>/<code>PLEDBGEPAYMENT</code> gift to the campaign <em>Annual Fund Drive - 2025-2026</em> dated 2025-10-01 through 2026-01-31, on any account in the household — the gift often arrives on a spouse’s account rather than the one that was mailed.</li>
+<li><strong>Responded</strong> means at least one SUCCEEDED <code>DONATION</code>/<code>PLEDGEPAYMENT</code> gift to the campaign <em>Annual Fund Drive - 2025-2026</em> dated 2025-10-01 through 2026-01-31, on any account in the household — the gift often arrives on a spouse’s account rather than the one that was mailed.</li>
 <li><strong>Prior giving</strong> is lifetime giving before October 1, 2025 (same donor basis and tiers as above; FY25 = July 2024 – June 2025).</li>
 <li><strong>Engagement before the appeal</strong> counts registrations for events that <em>started</em> by September 30, 2025 (event start date, not registration date), profiled as arts (performances), class, both, community-only, or none.</li>
 <li>The chapter reports <strong>aggregates only</strong>. Household-level detail, staff notes, and Don’s stewardship notes stay in local-only outputs (a separate non-published analysis site and an Excel workbook under <code>data/</code>).</li>
