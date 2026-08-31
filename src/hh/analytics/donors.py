@@ -9,6 +9,10 @@ from __future__ import annotations
 import pandas as pd
 
 JUNK_ACCOUNT_IDS = ("36805",)
+# internal house accounts that are not constituents: the cash-drawer misc account and
+# Neon's online-registration placeholder. Real transactions hang off them (walk-up
+# tickets, cash gifts) but no person does — exclude from anything constituent-facing.
+INTERNAL_ACCOUNT_IDS = (*JUNK_ACCOUNT_IDS, "42558")
 
 
 def succeeded_individual_gifts(donations: pd.DataFrame) -> pd.DataFrame:

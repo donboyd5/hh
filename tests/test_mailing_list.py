@@ -372,3 +372,36 @@ def test_appeal_window_gifts_counts_only_campaign_coded_gifts():
     assert appeal_window_gifts(d).empty
     any_code = appeal_window_gifts(d, campaign=None).set_index("id")
     assert any_code.loc["H2", "don_appeal_window"] == 500.0
+
+
+def test_internal_accounts_never_on_the_list():
+    """The cash-drawer and online-registration placeholder accounts are not constituents.
+
+    The cash account reaches the list through its recorded gifts (cash-drawer donations)
+    unless excluded — found 2026-08-31 via Judy's incomplete-address question.
+    """
+    base = _accounts()
+    row = {c: None for c in base.columns}
+    row.update(
+        {"account_id": "36805", "id": "36805",
+         "name": "Cash and Credit Card Miscellaneous Transactions",
+         "account_type": "Individual", "contact_type": "Individual",
+         "deceased": False, "do_not_contact": False,
+         "account_created_at": "2020-01-01"}
+    )
+    accounts = pd.concat([base, pd.DataFrame([row])], ignore_index=True)
+    gift = _donations().iloc[[0]].copy()
+    gift.loc[:, ["donation_id", "id", "account_id"]] = [["d7", "36805", "36805"]]
+    gift["donation_amount"] = 500.0
+    gift["donation_date"] = pd.Timestamp("2025-12-01")  # in-window; would qualify twice over
+    donations = pd.concat([_donations(), gift], ignore_index=True)
+    donor3, new_accounts, silent, responded, fst = _externals()
+
+    table = build_mailing_list(
+        accounts, donations, _registrations(),
+        donor3=donor3, new_accounts=new_accounts, silent_selected=silent,
+        appeal_responded=responded, fst_summary=fst,
+    )
+    ids = set(table["neon_hh_id"].dropna().astype(str))
+    assert "36805" not in ids  # the cash account's $500 in-window gift must not list it
+    assert "H1" in ids
