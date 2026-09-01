@@ -1,0 +1,82 @@
+---
+editor_options:
+  chunk_output_type: console
+---
+
+# How much does the annual fund drive raise?
+
+Every fall Hubbard Hall mails an annual-fund appeal. Neon codes gifts to an
+`Annual Fund Drive` campaign for each drive back to FY13, which allows two measures that
+answer different questions and are worth keeping apart:
+
+- **In the window** — gifts dated October 1 through January 31 of the drive's fiscal
+  year, the four months after the letter mails: how the mailed appeal itself performed.
+- **Total coded to the drive** — everything ever coded to that drive's campaign,
+  whenever it arrived: what the drive ultimately brought in.
+
+The fall 2025 drive's in-window giving is examined household-by-household in
+[Who responded to the fall 2025 appeal?](10-appeal-response.html); this chapter steps
+back to the year-by-year series. See [Methodology](99-methodology.html) for the
+clean-gift basis (business gifts coded to a drive, about $21k across all years, are
+excluded).
+
+```{python}
+#| label: setup-fund-drive
+import pandas as pd
+import plotly.express as px
+from hh.io import read_parquet
+from hh.viz import style, BLUE
+
+from hh.clean.accounts import clean_accounts
+from hh.clean.donations import clean_donations
+from hh.analytics.campaigns import annual_drive_by_year
+
+tab = annual_drive_by_year(clean_donations(accounts=clean_accounts()))
+tab = tab.loc[tab.index <= pd.Timestamp.today().year]  # drop the drive not yet mailed
+```
+
+```{python}
+#| label: tbl-fund-drive
+show = tab.copy()
+show.index = [f"FY{y - 2000}" for y in show.index]
+show.index.name = "Drive (fiscal year)"
+show["gifts"] = show["gifts"].astype(int)
+show["households"] = show["households"].astype(int)
+for c in ("oct_jan", "later", "total", "median_window_gift", "top_window_gift"):
+    show[c] = show[c].map("${:,.0f}".format)
+show = show.rename(columns={"oct_jan": "in window (Oct–Jan)", "later": "later, still coded",
+                            "total": "total coded", "median_window_gift": "median in-window gift",
+                            "top_window_gift": "largest in-window gift"})
+show
+```
+
+```{python}
+#| label: fig-fund-drive
+#| column: page
+long = tab.reset_index().melt(id_vars="drive", value_vars=["oct_jan", "later"],
+                              var_name="When", value_name="Dollars")
+long["FY"] = long["drive"].map(lambda y: f"FY{y - 2000}")
+long["When"] = long["When"].map({"oct_jan": "In window (Oct–Jan)",
+                                 "later": "Later, still coded to the drive"})
+fig = px.bar(long, x="FY", y="Dollars", color="When",
+             color_discrete_sequence=[BLUE, "#b3cde3"])
+style(fig).show()
+```
+
+What the series shows:
+
+- **The window measure is steadier and recently stronger.** In-window giving averaged
+  about `r f"${tab.loc[tab.index <= 2019, 'oct_jan'].mean():,.0f}"` across the fall
+  2012–2019 drives and `r f"${tab.loc[tab.index >= 2020, 'oct_jan'].mean():,.0f}"` across
+  fall 2020–2025, on household counts that barely moved. The best window on record is
+  the fall 2020 pandemic drive (`r f"${tab.loc[2021, 'oct_jan']:,.0f}"` from
+  `r int(tab.loc[2021, 'households'])` households, with a largest gift of only
+  `r f"${tab.loc[2021, 'top_window_gift']:,.0f}"`).
+- **The gap between the two measures is concentrated, not diffuse.** In most years a
+  single recurring five-figure gift arrives just after the window closes, and mid-decade
+  drives carry sizable later-coded tails (spring gifts carrying the campaign label), so
+  total-coded exceeds the window by anywhere from under ten percent to a factor of three.
+- **The typical gift has not changed.** The median in-window gift sits between $70 and
+  $100 in every drive on record.
+- A separate **Summer–Fall 2022 matching campaign** (about $28k, FY23) ran alongside
+  that year's drive and is not included in these figures.

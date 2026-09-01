@@ -376,3 +376,48 @@ def test_attendance_by_fy_counts_people_and_dollars():
     assert fy26["community_att"] == 0  # REFUNDED attendee is not a headcount...
     assert fy26["community_rev"] == 20.0  # ...but the gross dollar stays
     assert fy26["total_att"] == 1 and fy26["total_rev"] == 60.0
+
+
+def test_annual_drive_by_year_window_vs_total():
+    from hh.analytics.campaigns import annual_drive_by_year
+
+    don = pd.DataFrame(
+        {
+            "id": ["H1"] * 6 + ["H2"] * 2 + ["H3"] * 2 + ["H4"] * 1,
+            "campaign": [
+                "Annual Fund Drive - 2025-2026",  # in window (Oct 1 boundary)
+                "Annual Fund Drive - 2025-2026",  # in window (Jan 31 boundary)
+                "Annual Fund Drive - 2025-2026",  # out (Feb 1)
+                "Annual Fund Drive - 2025-2026",  # out (Sep 30 before mailing)
+                "Annual Fund Drive - 2025-2026",  # not succeeded -> dropped
+                "Annual Fund Drive - 2025-2026",  # company -> dropped
+                "Annual Fund Drive - 2024-2025",  # prior drive, in window
+                "Annual Fund Drive - 2024-2025",  # prior drive, out
+                "Gala Event Donations",           # other campaign -> dropped
+                "Annual Fund Drive - 2024-2025",  # pledge payment, in window
+            ] + ["Annual Fund Drive - 2025-2026"],
+            "donation_date": pd.to_datetime(
+                ["2025-10-01", "2026-01-31", "2026-02-01", "2025-09-30",
+                 "2025-12-01", "2025-12-02", "2024-12-01", "2025-03-01",
+                 "2025-12-01", "2024-11-01", "2025-12-15"]
+            ),
+            "donation_amount": [100.0, 50.0, 5000.0, 500.0, 25.0, 10.0,
+                                200.0, 300.0, 999.0, 40.0, 60.0],
+            "donation_status": ["SUCCEEDED", "SUCCEEDED", "SUCCEEDED", "SUCCEEDED",
+                                "FAILED",  # the not-succeeded row
+                                "SUCCEEDED", "SUCCEEDED", "SUCCEEDED", "SUCCEEDED",
+                                "SUCCEEDED", "FAILED"],
+            "donation_type": ["DONATION"] * 9 + ["PLEDGEPAYMENT", "DONATION"],
+            "account_type": ["Individual"] * 10 + ["Individual"],
+        }
+    )
+    don.loc[5, "account_type"] = "Company"
+    out = annual_drive_by_year(don)
+    assert list(out.index) == [2025, 2026]
+    d25 = out.loc[2025]
+    assert d25["gifts"] == 3 and d25["households"] == 2  # H2 x2 + H3 pledge; gala dropped
+    assert d25["oct_jan"] == 240.0 and d25["later"] == 300.0 and d25["total"] == 540.0
+    d26 = out.loc[2026]
+    assert d26["gifts"] == 4 and d26["households"] == 1  # both boundaries in; Feb/Sep out
+    assert d26["oct_jan"] == 150.0 and d26["later"] == 5500.0 and d26["total"] == 5650.0
+    assert d26["median_window_gift"] == 75.0 and d26["top_window_gift"] == 100.0

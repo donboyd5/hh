@@ -16,6 +16,7 @@ book:
         - 08-donor-preferences.qmd
         - 05-donor-attendance.qmd
         - 10-appeal-response.qmd
+        - 12-fund-drive.qmd
     - part: Performances
       chapters:
         - 02-timing.qmd
