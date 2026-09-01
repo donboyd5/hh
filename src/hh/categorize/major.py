@@ -94,6 +94,7 @@ CLASS_CATS = {
     "ballet",
     "pilates/yoga",
     "irish step dance",
+    "irish dance",  # Neon relabeled the category between the 2026-08-27 and 09-01 pulls
     "visual arts",
     "visual arts - crafts",
     "children's theater",

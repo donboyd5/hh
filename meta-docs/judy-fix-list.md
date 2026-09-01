@@ -42,8 +42,10 @@ the first two. Keep it free of personal names — counts and ids only.*
    (or there's a convention), reports generated from Neon directly would read better.
 8. **Category-label consistency** — the same program family appears over the years as
    "Bollywood  Dance" (with a double space), "Bollywood & BollyX", and plain "BollyX"
-   event names; a periodic category cleanup in Neon would make its own reports cleaner.
-   (We normalize category strings in code since 2026-08-31.)
+   event names, and the "Irish Step Dance" category was relabeled to "Irish Dance"
+   between our 2026-08-27 and 09-01 pulls (141 events). A periodic category cleanup in
+   Neon would make its own reports cleaner. (We normalize category strings in code since
+   2026-08-31, and our build now fails loudly on an unknown category.)
 
 ## Answered from our data (2026-08-31)
 
