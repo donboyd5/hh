@@ -64,18 +64,26 @@ style(fig).show()
 
 What the series shows:
 
-- **The window measure is steadier and recently stronger.** In-window giving averaged
-  about `r f"${tab.loc[tab.index <= 2019, 'oct_jan'].mean():,.0f}"` across the fall
-  2012–2019 drives and `r f"${tab.loc[tab.index >= 2020, 'oct_jan'].mean():,.0f}"` across
-  fall 2020–2025, on household counts that barely moved. The best window on record is
-  the fall 2020 pandemic drive (`r f"${tab.loc[2021, 'oct_jan']:,.0f}"` from
-  `r int(tab.loc[2021, 'households'])` households, with a largest gift of only
-  `r f"${tab.loc[2021, 'top_window_gift']:,.0f}"`).
-- **The gap between the two measures is concentrated, not diffuse.** In most years a
-  single recurring five-figure gift arrives just after the window closes, and mid-decade
-  drives carry sizable later-coded tails (spring gifts carrying the campaign label), so
-  total-coded exceeds the window by anywhere from under ten percent to a factor of three.
-- **The typical gift has not changed.** The median in-window gift sits between $70 and
-  $100 in every drive on record.
-- A separate **Summer–Fall 2022 matching campaign** (about $28k, FY23) ran alongside
-  that year's drive and is not included in these figures.
+```{python}
+#| label: fund-drive-notes
+#| output: asis
+#| echo: false
+pre = tab.loc[tab.index <= 2019, "oct_jan"].mean()
+post = tab.loc[tab.index >= 2020, "oct_jan"].mean()
+d21 = tab.loc[2021]
+print(f"- **The window measure is steadier and recently stronger.** In-window giving "
+      f"averaged about ${pre:,.0f} across the fall 2012-2019 drives and ${post:,.0f} "
+      f"across fall 2020-2025, on household counts that barely moved. The best window "
+      f"on record is the fall 2020 pandemic drive (${d21['oct_jan']:,.0f} from "
+      f"{int(d21['households'])} households, with a largest gift of only "
+      f"${d21['top_window_gift']:,.0f}).")
+print("- **The gap between the two measures is concentrated, not diffuse.** In most "
+      "years a single recurring five-figure gift arrives just after the window closes, "
+      "and mid-decade drives carry sizable later-coded tails (spring gifts carrying the "
+      "campaign label), so total-coded exceeds the window by anywhere from under ten "
+      "percent to a factor of three.")
+print("- **The typical gift has not changed.** The median in-window gift sits between "
+      "$70 and $100 in every drive on record.")
+print("- A separate **Summer-Fall 2022 matching campaign** (about $28k, FY23) ran "
+      "alongside that year's drive and is not included in these figures.")
+```
