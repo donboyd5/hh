@@ -24,7 +24,6 @@ excluded).
 #| label: setup-fund-drive
 import pandas as pd
 import plotly.express as px
-from hh.io import read_parquet
 from hh.viz import style, BLUE
 
 from hh.clean.accounts import clean_accounts
