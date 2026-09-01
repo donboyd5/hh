@@ -23,6 +23,9 @@ book:
     - part: Classes
       chapters:
         - 09-classes.qmd
+    - part: Attendance
+      chapters:
+        - 11-attendance-trends.qmd
     - part: Overlap
       chapters:
         - 04-overlap.qmd

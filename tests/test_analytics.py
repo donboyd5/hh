@@ -334,3 +334,45 @@ def test_donor_retention():
     assert abs(ret.loc[2023, "retention"] - 2 / 3) < 1e-9
     # final year (2024) is dropped — no next year
     assert 2024 not in ret.index
+
+
+def _ticket(*statuses):
+    """A one-ticket registration payload with the given attendee statuses."""
+    return [{"ticketId": None, "attendees": [
+        {"attendeeId": i, "registrationStatus": s} for i, s in enumerate(statuses)
+    ]}]
+
+
+def test_attendance_by_fy_counts_people_and_dollars():
+    from hh.analytics.attendance import attendance_by_fy
+
+    regs = pd.DataFrame(
+        {
+            "event_majorcat": ["class", "class", "performance", "other", "community", "ERROR"],
+            "starts_on": pd.to_datetime(
+                # FY25 (Jul 2024 - Jun 2025) x3 + the ERROR row; FY26 (from Jul 2025) x2
+                ["2024-09-01", "2025-03-01", "2024-11-01", "2025-08-01", "2025-07-01", "2024-10-01"]
+            ),
+            "amount": [100.0, 50.0, 60.0, 40.0, 20.0, 999.0],
+            # headcount, not registration count: 2+1 attendees on the first class
+            "tickets": [_ticket("SUCCEEDED", "SUCCEEDED"), _ticket("SUCCEEDED"),
+                        _ticket("SUCCEEDED"), _ticket("SUCCEEDED"),
+                        _ticket("REFUNDED"), _ticket("SUCCEEDED", "SUCCEEDED")],
+        }
+    )
+    out = attendance_by_fy(regs)
+    assert list(out.index) == [2025, 2026]
+    fy25 = out.loc[2025]
+    assert fy25["classes_att"] == 3  # 2 + 1 people
+    assert fy25["classes_rev"] == 150.0
+    assert fy25["performances_events_att"] == 1  # the performance event
+    assert fy25["performances_events_rev"] == 60.0
+    assert fy25["community_att"] == 0
+    assert fy25["community_rev"] == 0.0
+    assert fy25["total_att"] == 4
+    assert fy25["total_rev"] == 210.0
+    fy26 = out.loc[2026]
+    assert fy26["performances_events_att"] == 1 and fy26["performances_events_rev"] == 40.0
+    assert fy26["community_att"] == 0  # REFUNDED attendee is not a headcount...
+    assert fy26["community_rev"] == 20.0  # ...but the gross dollar stays
+    assert fy26["total_att"] == 1 and fy26["total_rev"] == 60.0
