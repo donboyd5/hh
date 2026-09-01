@@ -33,6 +33,7 @@ MAJOR_CASES = [
     ("Bollywood  Dance", "x", "class"),  # Neon's double-space spelling; _norm collapses
     ("Bollywood & BollyX", "x", "class"),
     ("Sword Fencing", "x", "class"),
+    ("Irish Dance", "x", "class"),  # the relabeled spelling (was "Irish Step Dance")
     ("Martial Arts Karate", "x", "class"),
     ("Workshops - Children", "x", "class"),  # substring families cover future labels
     ("Pottery Classes", "x", "class"),

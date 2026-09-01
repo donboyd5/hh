@@ -46,6 +46,9 @@ is the index, not the implementation. Started 2026-08-31; dates mark when a less
 - **Event category strings arrive with irregular spacing** — incidental trailing spaces
   ("Visual Arts ") and internal double spaces ("Bollywood  Dance"). Normalize (casefold,
   collapse whitespace) before any matching (`categorize/major.py:_norm`).
+- **Neon relabels event categories between pulls**, like households: "Irish Step Dance"
+  became "Irish Dance" between 2026-08-27 and 09-01 (141 events). The categorizer's
+  real-data tripwire caught it on the build; new spellings get a rule and a test case.
 - **The major categorizer has been ours since 2026-08-31** (informed by the R port it
   replaced) — documented principles in `categorize/major.py`, cross-cutting indicator
   flags in `categorize/indicators.py`. It still returns `"ERROR"` for unmatched events on
