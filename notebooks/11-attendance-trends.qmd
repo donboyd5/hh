@@ -45,8 +45,14 @@ ytd = int(tab.loc[current_fy, "total_att"])
 attendees
 ```
 
-FY`r current_fy - 2000` attendance is year-to-date as of the latest data pull and will
-rise as the year fills out (`r f"{ytd:,}"` attendees so far).
+
+```{python}
+#| label: ytd-note
+#| output: asis
+#| echo: false
+print(f"FY{current_fy - 2000} attendance is year-to-date as of the latest data pull "
+      f"and will rise as the year fills out ({ytd:,} attendees so far).")
+```
 
 ```{python}
 #| label: fig-attendance-by-fy
