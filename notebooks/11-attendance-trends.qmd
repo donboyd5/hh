@@ -1,0 +1,89 @@
+---
+editor_options:
+  chunk_output_type: console
+---
+
+# How many people attend our classes and performances?
+
+Total attendance across classes, performances/events, and community gatherings, by fiscal
+year, with what those attendees paid in tickets and class fees. Attendance counts people —
+each registration's ticket records — rather than registration counts (about 1.7 people per
+registration); the fiscal year runs July–June and is labeled by its ending year. See
+[Methodology](99-methodology.html) for the event categories, the headcount definition, and
+the cross-cutting fundraiser / youth / film flags. Class-taking households specifically
+are profiled in [Who takes classes at Hubbard Hall?](09-classes.html).
+
+```{python}
+#| label: setup-attendance
+import pandas as pd
+import plotly.express as px
+from hh.io import read_parquet
+from hh.viz import style, BLUE
+
+regs = read_parquet("processed", "registrations_enriched.parquet")
+
+from hh.analytics.attendance import attendance_by_fy
+from hh.analytics.mailing import fiscal_year
+
+tab = attendance_by_fy(regs)
+current_fy = int(fiscal_year(pd.Series(pd.Timestamp.today()))[0])
+complete = tab.loc[tab.index < current_fy]  # the current FY is partial
+
+CATS = ["classes", "performances_events", "community"]
+LABEL = {"classes": "Classes", "performances_events": "Performances & events",
+         "community": "Community"}
+```
+
+```{python}
+#| label: tbl-attendance-by-fy
+attendees = complete[[f"{c}_att" for c in CATS]].astype(int)
+attendees["Total"] = attendees.sum(axis=1)
+attendees.columns = [*map(LABEL.get, CATS), "Total"]
+attendees.index = [f"FY{fy - 2000}" for fy in attendees.index]
+attendees.index.name = "Fiscal year"
+ytd = int(tab.loc[current_fy, "total_att"])
+attendees
+```
+
+FY`r current_fy - 2000` attendance is year-to-date as of the latest data pull and will
+rise as the year fills out (`r f"{ytd:,}"` attendees so far).
+
+```{python}
+#| label: fig-attendance-by-fy
+#| column: page
+long = (complete[[f"{c}_att" for c in CATS]]
+        .rename(columns={f"{c}_att": LABEL[c] for c in CATS})
+        .reset_index()
+        .melt(id_vars="fy", var_name="Category", value_name="Attendees"))
+long["FY"] = long["fy"].map(lambda y: f"FY{y - 2000}")
+fig = px.bar(long, x="FY", y="Attendees", color="Category",
+             category_orders={"Category": [LABEL[c] for c in CATS]},
+             color_discrete_sequence=[BLUE, "#b3cde3", "#f0e9d8"])
+style(fig).show()
+```
+
+```{python}
+#| label: tbl-revenue-by-fy
+revenue = complete[[f"{c}_rev" for c in CATS]].round(0)
+revenue["Total"] = complete["total_rev"].round(0)
+revenue.columns = [*map(LABEL.get, CATS), "Total"]
+revenue.index = [f"FY{fy - 2000}" for fy in revenue.index]
+revenue.index.name = "Fiscal year"
+revenue.style.format("${:,.0f}")
+```
+
+Notes on these figures:
+
+- **Attendees are people, not registrations** — a family of four on one registration
+  counts as four. Only attendees whose ticket status is `SUCCEEDED` are counted, so
+  refunded canceled sections contribute nobody.
+- **Dollars are registration revenue as recorded in Neon** — ticket and class fees only,
+  not donations, and gross: a canceled section keeps its refunded amounts (under $2.5k
+  in the latest complete year).
+- A small share of attendance (363 attendees and $7,571 in FY26) is booked to Neon's
+  internal house accounts — real walk-up tickets, included here but attached to no
+  household.
+- FY20–FY22 cover the pandemic period and its reopening.
+- Events carry cross-cutting flags alongside their category — fundraiser, youth program,
+  and film — so, for example, a concert that is also a fundraiser can be counted either
+  way; those flags do not change the category totals above.

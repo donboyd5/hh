@@ -17,6 +17,7 @@ import re
 import pandas as pd
 
 from hh import io
+from hh.analytics.attendance import attendance_by_fy
 from hh.analytics.donors import INTERNAL_ACCOUNT_IDS
 from hh.analytics.mailing import fiscal_year
 from hh.analytics.productions import count_succeeded_attendees, match_production
@@ -81,27 +82,8 @@ def main() -> None:
     errors = r[r["event_majorcat"] == "ERROR"]
     ok = r[r["event_majorcat"] != "ERROR"]
 
-    # ---- trends table ----------------------------------------------------------
-    t = (
-        ok.pivot_table(index="fy", columns="event_majorcat", values="attendees",
-                       aggfunc="sum", fill_value=0)
-        .rename(columns={"class": "classes", "performance": "perf"})
-        .reindex(columns=["classes", "perf", "other", "community"], fill_value=0)
-    )
-    t["performances_events"] = t.pop("perf") + t.pop("other")
-    t["total"] = t["classes"] + t["performances_events"] + t["community"]
-    trends = t[["classes", "performances_events", "community", "total"]].astype(int)
-
-    # registration dollars on the same grid (gross, as recorded — see the notes)
-    rev = (
-        ok.pivot_table(index="fy", columns="event_majorcat", values="amount",
-                       aggfunc="sum", fill_value=0)
-        .rename(columns={"class": "classes", "performance": "perf"})
-        .reindex(columns=["classes", "perf", "other", "community"], fill_value=0)
-    )
-    rev["performances_events"] = rev.pop("perf") + rev.pop("other")
-    rev["total"] = rev["classes"] + rev["performances_events"] + rev["community"]
-    rev = rev.reindex(trends.index, fill_value=0.0)
+    # ---- trends table (one source of truth with the book chapter) --------------
+    trends = attendance_by_fy(r)
 
     lines = [
         "# Attendance — trends and current-year breakdown",
@@ -119,11 +101,11 @@ def main() -> None:
     ]
     for fy, row in trends.iterrows():
         label = f"FY{fy - 2000}" + (" (partial)" if fy == current_fy else "")
-        rr = rev.loc[fy]
-        lines.append(f"| {label} | {row['classes']:,} | {fmt(rr['classes'])} "
-                     f"| {row['performances_events']:,} | {fmt(rr['performances_events'])} "
-                     f"| {row['community']:,} | {fmt(rr['community'])} "
-                     f"| {row['total']:,} | {fmt(rr['total'])} |")
+        lines.append(f"| {label} | {int(row['classes_att']):,} | {fmt(row['classes_rev'])} "
+                     f"| {int(row['performances_events_att']):,} "
+                     f"| {fmt(row['performances_events_rev'])} "
+                     f"| {int(row['community_att']):,} | {fmt(row['community_rev'])} "
+                     f"| {int(row['total_att']):,} | {fmt(row['total_rev'])} |")
     lines += [
         "",
         "*Attendees = people (each registration's ticket records, `registrationStatus`",
