@@ -105,6 +105,14 @@ is the index, not the implementation. Started 2026-08-31; dates mark when a less
   `meta-docs/mailing-list-floor-alternatives.md`).
 - **The donor export (FY24–26) carries no Neon ids** — matched by normalized name + city.
 
+## External people-lists (data/00_raw/external)
+
+- **Name lists from partners arrive in odd layouts** — couples in one cell, "&/or"
+  alternates, surname fragments — and get fuzzy-matched against Neon for human
+  review, never auto-merged. Files, layout quirks, and the full matching recipe
+  (nickname map + token-set + double-metaphone) live in
+  `meta-docs/external-lists.md`; scoring primitives in `analytics/fst_match.py`.
+
 ## Fort Salem (web source)
 
 - **The sponsor page's structure differs by year**, and its final "2022 Sponsors:"
