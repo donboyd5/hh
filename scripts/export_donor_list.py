@@ -48,16 +48,19 @@ MFS_FOLD_INTO_NEON = {
     "tara & scott smith", "donna & harry orlik",
 }
 
+# Labels carry their cutoffs so the board sheet's category column reads standalone
 CATEGORY_LABELS = {
-    1: "appeal-2025",      # gave to last year's Annual Fund campaign
-    2: "donor-5yr",        # no campaign gift, $150+ FY22-26
-    3: "donor-steward",    # donor under $150 with a steward assigned
-    4: "engaged",          # $500+ classes/tickets spend, no gift in five years
-    5: "new-account",      # FY25-26 Neon account, $50+ registrations
-    6: "lapsed-keep",      # hand-picked lapsed donors
-    7: "fst",              # Fort Salem sponsor, not in Neon, addressed
-    8: "mfs",              # Music from Salem donor, not in Neon, addressed
+    1: "2025 appeal giver",                       # $10+ to the campaign, Oct 25-Jan 26
+    2: "donor $150+ FY22-26",                     # no campaign gift
+    3: "donor <$150 w/ steward",                  # gave, under the bar, steward assigned
+    4: "engaged non-donor $500+ spend",           # no 5-yr gift; classes/tickets spend
+    5: "new account FY25-26 $50+ reg",            # Judy's list, lifetime registrations
+    6: "lapsed donor - keep",                     # hand-picked, below every bar
+    7: "FST sponsor w/ address",                  # Fort Salem, not in Neon
+    8: "MfS donor w/ address",                    # Music from Salem, not in Neon
 }
+
+SUPER = {k: ("In Neon" if k <= 6 else "Not in Neon") for k in CATEGORY_LABELS}
 
 PRINTER_COLUMNS = ["id", "mailing_name", "address", "city", "state", "zip"]
 BOARD_COLUMNS = PRINTER_COLUMNS + ["category", "email", "phone", "steward", "notes"]
@@ -211,8 +214,8 @@ def _md(board: pd.DataFrame) -> str:
         "probable > web business). Sorted by surname. Board sheet carries category,",
         "contact info, steward, and notes; printer sheet is the label feed.*",
         "",
-        "| # | Category | Definition | Households |",
-        "|---|---|---|---:|",
+        "| Group | # | Category | Definition | Households |",
+        "|---|---|---|---|---:|",
     ]
     counts = board["category"].value_counts()
     defs = {
@@ -225,11 +228,28 @@ def _md(board: pd.DataFrame) -> str:
         CATEGORY_LABELS[7]: "Fort Salem sponsor, not in Neon, address found (2 are business addresses: Bitar, Bulford)",
         CATEGORY_LABELS[8]: "Music from Salem donor, not in Neon, address on the MfS list",
     }
+    super_label = ""
     for k in sorted(CATEGORY_LABELS):
         label = CATEGORY_LABELS[k]
-        lines.append(f"| {k} | {label} | {defs[label]} | {int(counts.get(label, 0))} |")
+        if SUPER[k] != super_label and super_label:
+            n_super = sum(
+                int(counts.get(CATEGORY_LABELS[j], 0))
+                for j in CATEGORY_LABELS if SUPER[j] == super_label
+            )
+            lines.append(f"| | | | **{super_label} subtotal** | **{n_super}** |")
+            lines.append(f"| **{SUPER[k]}** | {k} | {label} | {defs[label]} | {int(counts.get(label, 0))} |")
+        elif SUPER[k] != super_label:
+            lines.append(f"| **{SUPER[k]}** | {k} | {label} | {defs[label]} | {int(counts.get(label, 0))} |")
+        else:
+            lines.append(f"| | {k} | {label} | {defs[label]} | {int(counts.get(label, 0))} |")
+        super_label = SUPER[k]
+    n_super = sum(
+        int(counts.get(CATEGORY_LABELS[j], 0))
+        for j in CATEGORY_LABELS if SUPER[j] == super_label
+    )
+    lines.append(f"| | | | **{super_label} subtotal** | **{n_super}** |")
     lines += [
-        f"| | **total** | | **{len(board)}** |",
+        f"| | | | **total** | **{len(board)}** |",
         "",
         f"*Set aside: {qa.get('set_aside_deceased_dnc', 0)} Neon households deceased or",
         f"do-not-contact; {qa.get('mfs_folded', 0)} MfS rows folded into existing Neon",
