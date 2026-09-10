@@ -6,6 +6,11 @@ workbooks in `data/20_processed/` (also PII). **None of this goes in the book or
 the web page** — the published site carries aggregates only. Started 2026-09-03;
 dates mark when a file or decision landed.*
 
+**The catalog of address-bearing sources now lives in `address-sources.md`** — every
+file below also appears there, with its address columns, key, and the precedence that
+combines them into the consolidated address book (2026-09-10). This page keeps only
+the matching recipe; don't duplicate file inventory here.
+
 ## Files received
 
 | File (in `data/00_raw/external/`) | Received | Rows | sha256 (first 16) |
