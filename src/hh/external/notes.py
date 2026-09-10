@@ -88,3 +88,55 @@ def load_fst_contact_notes(path: Path | None = None) -> pd.DataFrame:
         if isinstance(v, dict)
     ]
     return pd.DataFrame(rows, columns=cols)
+
+
+CONTACT_RESEARCH_FILENAME = "contact-research.yaml"
+
+
+def load_contact_research(path: Path | None = None) -> pd.DataFrame:
+    """Web-research phone/email for list people not in Neon, one row per book name:
+    ``[household_name, phone, phone_confidence, email, email_confidence, finding,
+    death_or_move, sources, deceased_web]``.
+
+    Hand/AI-maintained under ``data/30_external`` (local only — names real people and
+    cites people-search pages). Confidence follows the research policy in
+    ``meta-docs/address-sources.md``: people-search hits are hints, never confirmed
+    contact until Don says so. ``deceased_web`` is an explicit flag (not parsed from
+    prose — a note saying "husband died, she survives" must never mark the widow
+    deceased) and is set only when the listed person themselves is confirmed dead with
+    a cited obituary; it flips the book's ``deceased`` column. ``sources`` is the
+    joined URL list for provenance.
+    """
+    src = (
+        Path(path)
+        if path is not None
+        else config.layer_dir("external") / CONTACT_RESEARCH_FILENAME
+    )
+    cols = [
+        "household_name", "phone", "phone_confidence", "email", "email_confidence",
+        "finding", "death_or_move", "sources", "deceased_web",
+    ]
+    if not src.exists():
+        return pd.DataFrame(columns=cols)
+    loaded = yaml.safe_load(src.read_text()) or {}
+    _blank = {"", "none", "n/a", "nan"}
+
+    def _clean(v):
+        return None if v is None or str(v).strip().lower() in _blank else str(v).strip()
+
+    rows = [
+        {
+            "household_name": str(k),
+            "phone": _clean(v.get("phone")),
+            "phone_confidence": _clean(v.get("phone_confidence")),
+            "email": _clean(v.get("email")),
+            "email_confidence": _clean(v.get("email_confidence")),
+            "finding": _clean(v.get("finding")),
+            "death_or_move": _clean(v.get("death_or_move")),
+            "sources": "; ".join(str(s) for s in v.get("sources") or []),
+            "deceased_web": bool(v.get("deceased_web", False)),
+        }
+        for k, v in (loaded.get("notes") or {}).items()
+        if isinstance(v, dict)
+    ]
+    return pd.DataFrame(rows, columns=cols)

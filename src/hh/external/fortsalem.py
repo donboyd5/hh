@@ -260,3 +260,36 @@ def load_fst_sponsors(*, force: bool = False) -> pd.DataFrame:
     """Snapshot (fetch if missing) then parse; returns the (year, tier, name) table."""
     path = fetch_snapshot(force=force)
     return parse_sponsors(path.read_text(errors="replace"))
+
+
+def fst_vs_neon(accounts: pd.DataFrame) -> pd.DataFrame:
+    """Individual Fort Salem sponsors with their Neon match state attached.
+
+    The exact-match-plus-confirmed-identities assembly the mailing-list export and the
+    address book share: individuals only (anonymous and likely-org listings dropped),
+    exact household-name matches (city tiebreak when available) plus Don's
+    confirmations from ``fst-confirmations.yaml`` folded in. Result columns are
+    :func:`summarize_sponsors`'s plus ``id`` (Neon rollup id where matched),
+    ``in_neon``, and ``match_type`` ("exact" | "confirmed"); held-back conflicts are
+    reported via ``attrs["conflicts"]`` rather than folded.
+    """
+    from .fst_confirmations import load_confirmations, resolve
+    from .mailing import match_households
+
+    summary = summarize_sponsors(load_fst_sponsors())
+    summary = summary[~summary["anonymous"] & ~summary["org"]]
+    households = accounts.drop_duplicates(subset=["id"])[["id", "name", "city"]]
+    matched = match_households(summary["name"], households)
+    summary = summary.assign(
+        id=matched["id"].values,
+        in_neon=matched["match"].isin(["name+city", "name"]),
+        match_type=matched["match"].map({"name+city": "exact", "name": "exact"}),
+    )
+    confirmed, _duplicates, conflicts = resolve(load_confirmations(), households)
+    folded = summary["name"].isin(confirmed) & ~summary["in_neon"]
+    summary.loc[folded, "id"] = summary.loc[folded, "name"].map(confirmed)
+    summary.loc[folded, "in_neon"] = True
+    summary.loc[folded, "match_type"] = "confirmed"
+    summary = summary.reset_index(drop=True)
+    summary.attrs["conflicts"] = list(conflicts)
+    return summary
