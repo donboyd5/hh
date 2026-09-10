@@ -30,7 +30,7 @@ from hh.clean.donations import clean_donations
 from hh.external import lists
 from hh.external.address_book import build_address_book
 from hh.external.fortsalem import fst_vs_neon
-from hh.external.notes import load_fst_contact_notes
+from hh.external.notes import load_contact_research, load_fst_contact_notes
 from hh.external.provenance import append_external_manifest, external_source_entry
 
 XLSX_FILENAME = "address_book.xlsx"
@@ -72,6 +72,7 @@ def main() -> None:
         appeal_ids=lists.load_appeal2025_ids(),
         mailing_list=mailing_list,
         fst_summary=fst_vs_neon(accounts),
+        contact_research=load_contact_research(),
     )
     io.write_parquet(book, "processed", BOOK_PARQUET)
     io.write_parquet(candidates, "processed", CANDIDATES_PARQUET)
@@ -87,6 +88,7 @@ def main() -> None:
                 "MfS donors (list rows)", "Friends to add (rows)", "MfS attendees (names)",
                 "deceased (household: all members)", "do-not-contact (any living member)",
                 "company accounts excluded",
+                "research: phone found", "research: email found",
             ],
             "detail": [
                 len(book),
@@ -107,6 +109,14 @@ def main() -> None:
                 int(book["deceased"].fillna(False).sum()),
                 int(book["do_not_contact"].fillna(False).sum()),
                 book.attrs.get("n_companies_excluded", 0),
+                "; ".join(
+                    f"{k} {v}"
+                    for k, v in book["research_phone_confidence"].value_counts(dropna=False).items()
+                ),
+                "; ".join(
+                    f"{k} {v}"
+                    for k, v in book["research_email_confidence"].value_counts(dropna=False).items()
+                ),
             ],
         }
     )
@@ -147,6 +157,11 @@ def main() -> None:
     print(
         f"  not in Neon: {int(solo['possible_neon_match'].notna().sum())} with a fuzzy Neon "
         f"candidate, {len(unmatched)} with none"
+    )
+    print(
+        f"  research (not in Neon): "
+        f"{int(solo['research_phone'].notna().sum())} phone, "
+        f"{int(solo['research_email'].notna().sum())} email"
     )
     print(f"saved: {BOOK_PARQUET}, {CANDIDATES_PARQUET}, {XLSX_FILENAME}")
 

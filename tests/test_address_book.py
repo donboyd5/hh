@@ -255,3 +255,86 @@ def test_fuzzy_candidate_shown_never_folded():
     assert solo["in_neon"].eq(False).all()  # never absorbed
     # 3 individual households + 2 list-vouched company-only rollups
     assert int(book["in_neon"].sum()) == 5
+
+
+def _research_frame():
+    return pd.DataFrame(
+        {
+            "household_name": ["Bob & Carolyn Akland", "Ruth Flint Frew", "Teri Ptacek",
+                               "Widow Person"],
+            "phone": ["518-555-0199", None, "802-555-0143", None],
+            "phone_confidence": ["probable", None, "hint", None],
+            "email": [None, None, "teri@example.org", None],
+            "email_confidence": [None, None, "confirmed", None],
+            "finding": [
+                "TruePeopleSearch lists this number at the Cossayuna address.",
+                "Died June 2025 (obituary).",
+                "Professional site contact.",
+                "Husband died 2024; she survives and still lives in Salem.",
+            ],
+            "death_or_move": [None, "obituary confirms death", None, "husband died 2024"],
+            "sources": [
+                "https://www.truepeoplesearch.com/details?x=1",
+                "https://www.gariepyfuneralhomes.com/obituaries/ruth-frew",
+                "https://example.org/teri",
+                "https://example.org/obit",
+            ],
+            "deceased_web": [False, True, False, False],
+        }
+    )
+
+
+def test_contact_research_fills_solo_rows_only():
+    frame = _research_frame()
+    frame.loc[3, "household_name"] = "Elizabeth Skinner"  # a solo row in the fixture
+    book, _ = _book(contact_research=frame)
+    by = book.set_index("name")
+    # solo row: phone + confidences + joined note
+    assert by.loc["Bob & Carolyn Akland", "research_phone"] == "518-555-0199"
+    assert by.loc["Bob & Carolyn Akland", "research_phone_confidence"] == "probable"
+    assert "TruePeopleSearch" in by.loc["Bob & Carolyn Akland", "research_note"]
+    assert by.loc["Teri Ptacek", "research_email"] == "teri@example.org"
+    # Neon rows are untouched — Neon's own phone/email columns serve them
+    assert pd.isna(by.loc["Ann & Bob Smith", "research_phone"])
+    assert "phone" in book.columns and "email" in book.columns
+
+
+def test_research_deceased_flips_only_on_explicit_flag():
+    # the widow's note mentions a death in prose but lacks the flag: she stays mailable
+    book, _ = _book(contact_research=_research_frame())
+    by = book.set_index("name")
+    assert bool(by.loc["Ruth Flint Frew", "deceased"]) is True  # explicit deceased_web
+    widow = book[book["name"].str.contains("Widow", na=False)]
+    if len(widow):  # only present when the row survived the fixture's solo pool
+        assert bool(widow.iloc[0]["deceased"]) is False
+    # prose alone never flips: a died-mentioning finding with the flag off
+    frame = _research_frame()
+    frame["deceased_web"] = False
+    frame.loc[0, "finding"] = "Died last year, sources say."
+    book2, _ = _book(contact_research=frame)
+    ak = book2[book2["name"].eq("Bob & Carolyn Akland")].iloc[0]
+    assert bool(ak["deceased"]) is False
+
+
+def test_contact_research_loader_normalizes_none(tmp_path):
+    from hh.external.notes import CONTACT_RESEARCH_FILENAME, load_contact_research
+
+    src = tmp_path / CONTACT_RESEARCH_FILENAME
+    src.write_text(
+        "# header\n"
+        "notes:\n"
+        '  "A Person":\n'
+        "    phone: none\n"
+        "    phone_confidence: none\n"
+        "    email: a@example.org\n"
+        "    email_confidence: confirmed\n"
+        "    finding: \"found email\"\n"
+        "    sources:\n"
+        "      - https://example.org/a\n"
+    )
+    df = load_contact_research(src)
+    assert len(df) == 1
+    assert pd.isna(df.iloc[0]["phone"])  # literal "none" -> missing
+    assert df.iloc[0]["email"] == "a@example.org"
+    assert df.iloc[0]["sources"] == "https://example.org/a"
+    assert bool(df.iloc[0]["deceased_web"]) is False  # absent flag defaults to False

@@ -46,9 +46,11 @@ BOOK_COLUMNS = [
     "mfs_donor", "friends_to_add", "mfs_attendee",
     "mailed_2025", "in_mailing_list", "letter",
     "address", "city", "state_province", "zip_code", "address_source",
-    "address_conflict", "po_box",
+    "address_conflict", "po_box", "phone", "email",
     "deceased", "deceased_members", "do_not_contact",
     "web_note", "possible_neon_match", "note_boyd", "neon_company_only",
+    "research_phone", "research_phone_confidence",
+    "research_email", "research_email_confidence", "research_note",
 ]
 
 CANDIDATE_COLUMNS = [
@@ -84,6 +86,7 @@ def build_address_book(
     appeal_ids: pd.DataFrame,
     mailing_list: pd.DataFrame,
     fst_summary: pd.DataFrame | None = None,
+    contact_research: pd.DataFrame | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Assemble the book and its per-address candidates table.
 
@@ -93,7 +96,10 @@ def build_address_book(
     (``data/10_interim/fst_contacts.parquet``), ``contact_notes`` the web-research
     notes (``load_fst_contact_notes``), ``appeal_ids`` the Fall 2025 appeal's Neon ids
     (``load_appeal2025_ids``), and ``mailing_list`` the built mailing list (letter and
-    Don's-notes context). ``fst_summary`` defaults to :func:`fortsalem.fst_vs_neon`.
+    Don's-notes context). ``fst_summary`` defaults to :func:`fortsalem.fst_vs_neon`;
+    ``contact_research`` (``load_contact_research``) fills phone/email on standalone
+    rows — people-search hints with confidence labels, never auto-contact until Don
+    says so.
     """
     if fst_summary is None:
         fst_summary = fst_vs_neon(accounts)
@@ -220,7 +226,7 @@ def build_address_book(
     for name in {str(n) for n in received.get("mfs_donor", pd.DataFrame(columns=["name"]))["name"]}:
         mfs_identity[name] = mfs_hh.get(name) or display_name.get(name, name)
     candidates = _address_candidates(
-        book, solo, roll_hits, contact_notes, original_name,
+        book, roll_hits, contact_notes, original_name,
         mfs_frame=received.get("mfs_donor", pd.DataFrame()), mfs_identity=mfs_identity,
     )
 
@@ -305,6 +311,31 @@ def build_address_book(
             book.loc[~book["in_neon"], "name"].map(top)
         )
 
+    # -- web-research phone/email for standalone rows (hints, never auto-contact) ------
+    if contact_research is not None and not contact_research.empty:
+        cr = contact_research.drop_duplicates("household_name").set_index("household_name")
+        at = ~book["in_neon"] & book["name"].isin(cr.index)
+        names = book.loc[at, "name"]
+        book.loc[at, "research_phone"] = names.map(cr["phone"])
+        book.loc[at, "research_phone_confidence"] = names.map(cr["phone_confidence"])
+        book.loc[at, "research_email"] = names.map(cr["email"])
+        book.loc[at, "research_email_confidence"] = names.map(cr["email_confidence"])
+
+        def _research_note(row) -> str | None:
+            parts = [
+                str(p)
+                for p in (row["finding"], row["death_or_move"], row["sources"])
+                if pd.notna(p) and str(p).strip().lower() not in ("", "none", "nan")
+            ]
+            return " | ".join(parts) or None
+
+        book.loc[at, "research_note"] = names.map(cr.apply(_research_note, axis=1))
+        # an explicit deceased_web flag flips the row's deceased flag — never parsed
+        # from the prose, because findings routinely say "husband died, she survives"
+        # and that widow must stay mailable. Don can override by editing the yaml.
+        web_dead = set(cr.index[cr["deceased_web"].fillna(False).astype(bool)])
+        book.loc[~book["in_neon"] & book["name"].isin(web_dead), "deceased"] = True
+
     book = book.sort_values(["in_neon", "name"], ascending=[False, True]).reset_index(drop=True)
     book.attrs["n_companies_excluded"] = int(accounts["account_type"].eq("Company").sum())
     return book[BOOK_COLUMNS], candidates[CANDIDATE_COLUMNS]
@@ -352,7 +383,6 @@ def _merge_solo_across_lists(solo: pd.DataFrame) -> tuple[pd.DataFrame, dict[str
 
 def _address_candidates(
     book: pd.DataFrame,
-    solo: pd.DataFrame,
     roll_hits: pd.DataFrame,
     contact_notes: pd.DataFrame,
     original_name: dict[str, str],

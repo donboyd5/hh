@@ -54,6 +54,7 @@ any received list changes. Assembly code: `src/hh/external/address_book.py`; par
 | **MfS 2026 donor list** | `data/00_raw/external/MfS 2026 Donors - SubSet Rev.xlsx` (received 2026-08-31, sha256 `b16fbffdce95c640`) | name string | header-less; 67 donor rows, 64 usable addresses ("Address Unavailable" / "Duplicate (See Above)" placeholders blanked, rows kept). Same file `external-lists.md` describes — its "60 rows" count there reflects a different counting convention, not a revision |
 | **Fall Appeal 2025** | `data/30_external/Fall Appeal 2025 L With Donations.xlsx` | Neon ids (`hhid`, account `id`, artists' `Account ID`) | `mailed_2025` flag only; ids resolve exactly against the rollup, no name matching |
 | **Web research** | `data/30_external/fst-contact-notes.yaml` | Fort Salem name | business addresses (confidence `business`) are last-rank candidates; confirmed deaths/survivors drive `deceased` flag and survivor relabels |
+| **Contact research** | `data/30_external/contact-research.yaml` | address-book name | web-research phone/email for FST/MfS/Friends people **not in Neon** (2026-09-10 round: 142 targets — FST rule-B-kept, MfS donors, Friends). People-search hits carry confidence labels (confirmed/probable/hint) and source URLs; they are hints, never auto-contact. A death finding that cites a source flips the row's `deceased` flag (edit the yaml to override). Fills `research_phone`/`research_email` columns; Neon rows keep Neon's own `phone`/`email` |
 | *Names-only lists* | `Friends to add.xlsx`, `MfS Concerts attendees at HH.xlsx`, `New Accounts 25-26 for AF Mailing.xlsx` | name string | no addresses; membership flags (`friends_to_add`, `mfs_attendee`) and fuzzy candidates only |
 
 ## Columns that matter for cherry-picking
@@ -67,6 +68,8 @@ any received list changes. Assembly code: `src/hh/external/address_book.py`; par
 - address: `address/city/state_province/zip_code`, `address_source` (which rank won),
   `address_conflict` (sources disagree — probably moved; check `address-candidates`),
   `po_box`
+- contact: `phone`/`email` (Neon, for rows in Neon), `research_phone`/
+  `research_email` + confidences + `research_note` (web research, for rows not in Neon)
 - exclusions/context: `deceased`, `deceased_members`, `do_not_contact`, `web_note`,
   `possible_neon_match` (top fuzzy Neon candidate for not-in-Neon rows), `note_boyd`,
   `neon_company_only`
