@@ -21,7 +21,7 @@ import re
 import sys
 
 import pandas as pd
-from openpyxl.styles import Font
+from openpyxl.styles import Font, PatternFill
 from openpyxl.utils import get_column_letter
 
 from hh import config, io
@@ -89,6 +89,10 @@ COLUMN_WIDTHS = {
 DOLLAR_COLUMNS = {"donations_2025_26", "donations_5yr"}
 DOLLAR_FORMAT = "#,##0"
 
+# constructed (not from Neon) salutations get flagged for review - Don, 2026-09-11
+REVIEW_FILL = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
+REVIEW_FONT = Font(bold=True)
+
 # below-table individual rosters (in the md): only for categories small enough that a
 # full name list is itself useful, not a wall of text (Don, 2026-09-11)
 INDIVIDUAL_LIST_MAX = 10
@@ -117,6 +121,19 @@ def _last_name(name: str) -> str | None:
     s = re.sub(r"\s+", " ", _JUNK.sub(" ", s)).strip()
     toks = s.split()
     return toks[-1] if toks else None
+
+
+def _construct_salutation(name: str) -> str | None:
+    """Best-effort salutation when Neon has none on file: first name(s) only, e.g.
+    "Ann & Bob Smith" -> "Ann & Bob", "Katherine Kelleher & John Franklin" -> "Katherine
+    & John", "Elizabeth L. Ellard" -> "Elizabeth". A guess, not a lookup - callers flag
+    these for review rather than trusting them outright (Don, 2026-09-11)."""
+    s = re.sub(r"\s+", " ", str(name)).strip()
+    if not s:
+        return None
+    parts = re.split(r"\s*(?:&|\band\b)\s*", s, flags=re.I)
+    firsts = [p.split()[0] for p in parts if p.split()]
+    return " & ".join(firsts) if firsts else s
 
 
 def _norm(name: str) -> str:
@@ -416,13 +433,19 @@ def _reception_draft(
 
 
 def _enrich(df: pd.DataFrame, fy2026: pd.Series, fy5yr: pd.Series) -> pd.DataFrame:
-    """Adds last_name and the two donation-total columns (Don, 2026-09-11)."""
+    """Adds last_name, the two donation-total columns, and fills any blank salutation
+    with a constructed guess (Don, 2026-09-11). `salutation_needs_review` is not an
+    exported column - main() reads it to highlight the constructed cells in the xlsx."""
     df = df.copy()
     df["last_name"] = df["mailing_name"].map(_last_name)
     has_id = df["neon_hh_id"].notna()
     ids = df["neon_hh_id"].where(has_id, "")
     df["donations_2025_26"] = ids.map(fy2026).fillna(0.0).where(has_id)
     df["donations_5yr"] = ids.map(fy5yr).fillna(0.0).where(has_id)
+    df["salutation_needs_review"] = df["salutation"].isna() | df["salutation"].astype(str).str.strip().eq("")
+    df.loc[df["salutation_needs_review"], "salutation"] = (
+        df.loc[df["salutation_needs_review"], "mailing_name"].map(_construct_salutation)
+    )
     return df
 
 
@@ -601,6 +624,10 @@ def main() -> None:
     dnc_review = board.attrs["dnc_review"]
     not_in_neon = board[~board["in_neon"]].reset_index(drop=True)
     reception_draft = board.attrs["reception_draft"]
+    sources = {
+        "printer": board, "board": board, "do_not_contact": dnc_review,
+        "not_in_neon": not_in_neon, "reception_draft": reception_draft,
+    }
     with pd.ExcelWriter(xlsx, engine="openpyxl") as xw:
         board[PRINTER_COLUMNS].to_excel(xw, sheet_name="printer", index=False)
         board[BOARD_COLUMNS].to_excel(xw, sheet_name="board", index=False)
@@ -616,6 +643,12 @@ def main() -> None:
                 if col in DOLLAR_COLUMNS:
                     for cell in sheet[letter][1:]:
                         cell.number_format = DOLLAR_FORMAT
+                if col == "salutation":
+                    review = sources[name]["salutation_needs_review"]
+                    for cell, flagged in zip(sheet[letter][1:], review):
+                        if flagged:
+                            cell.font = REVIEW_FONT
+                            cell.fill = REVIEW_FILL
             for cell in sheet[1]:
                 cell.font = Font(bold=True)
     md_path.write_text(_md(board))
