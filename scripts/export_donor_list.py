@@ -87,6 +87,72 @@ def _label_name(name: str) -> str:
     return re.sub(r"\s*\(.*?\)\s*", " ", str(name)).strip() or str(name)
 
 
+# Business addresses arrive as one free-text line ("4 Care Ln, Saratoga Springs, NY
+# 12866 (practice)"); the printer needs them split. Keyed by book name (Don, 2026-09-11:
+# both FST business-address donors stay on the list).
+BUSINESS_ADDRESS = {
+    "lionel bulford": ("4 Care Ln", "Saratoga Springs", "NY", "12866"),
+    "rana bitar and joseph jacob": ("2125 River Rd Ste 100", "Niskayuna", "NY", "12309"),
+}
+
+
+def _clean_zip(z) -> str | None:
+    """Label-ready ZIP: leading zeros restored (Excel/Neon drop them for New England),
+    ZIP+4 hyphenated. Anything unrecognizable passes through untouched."""
+    if pd.isna(z):
+        return None
+    s = re.sub(r"[^0-9-]", "", str(z))
+    if re.fullmatch(r"\d{9}", s):
+        return f"{s[:5]}-{s[5:]}"
+    if re.fullmatch(r"\d{1,5}", s):
+        return s.zfill(5)
+    if re.fullmatch(r"\d{1,5}-\d{4}", s):
+        base, plus4 = s.split("-")
+        return f"{base.zfill(5)}-{plus4}"
+    return str(z).strip() or None
+
+
+def _clean_city(c) -> str | None:
+    """Label-ready city: whitespace squeezed, a trailing ', NY' dropped, ALL-CAPS
+    title-cased ('CAMBRIDGE' -> 'Cambridge'); mixed-case entries are left alone."""
+    if pd.isna(c):
+        return None
+    s = re.sub(r"\s+", " ", str(c)).strip()
+    s = re.sub(r",\s*[A-Z]{2}$", "", s)
+    if s.isupper():
+        s = s.title()
+    return s or None
+
+
+def _tidy(board: pd.DataFrame) -> pd.DataFrame:
+    """Printer hygiene on the assembled rows (see the helpers above)."""
+    board = board.copy()
+    for r in board.itertuples():
+        biz = BUSINESS_ADDRESS.get(_norm(r.mailing_name))
+        if biz:
+            board.loc[r.Index, ["address", "city", "state", "zip"]] = biz
+    board["address"] = board["address"].map(
+        lambda a: re.sub(r"\s+", " ", str(a)).strip().rstrip(",") if pd.notna(a) else a
+    )
+    board["city"] = board["city"].map(_clean_city)
+    board["state"] = board["state"].map(lambda s: str(s).strip().upper() if pd.notna(s) else s)
+    board["zip"] = board["zip"].map(_clean_zip)
+    # a blank state is filled from other rows sharing the same city and ZIP (one Neon
+    # record lacks it); unmatched blanks stay blank and are flagged in the md
+    known = (
+        board.dropna(subset=["state"])
+        .loc[lambda d: d["state"].ne("")]
+        .drop_duplicates(["city", "zip"])
+        .set_index(["city", "zip"])["state"]
+    )
+    blank = board["state"].isna() | board["state"].eq("")
+    for i in board.index[blank]:
+        key = (board.at[i, "city"], board.at[i, "zip"])
+        if key in known.index:
+            board.at[i, "state"] = known[key]
+    return board
+
+
 def build() -> pd.DataFrame:
     m = io.read_parquet("processed", "mailing_list.parquet")
     book = io.read_parquet("processed", "address_book.parquet")
@@ -164,7 +230,7 @@ def build() -> pd.DataFrame:
 
     board = pd.DataFrame(rows)
     n_built = len(board)
-    board = board[board["address"].notna()].copy()  # every row must be mailable
+    board = _tidy(board[board["address"].notna()])  # every row must be mailable
     board["__key"] = board["mailing_name"].map(_sort_key)
     board = board.sort_values("__key").drop(columns="__key").reset_index(drop=True)
     board.insert(0, "id", range(1, len(board) + 1))
