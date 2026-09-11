@@ -25,6 +25,7 @@ from openpyxl.styles import Font
 from openpyxl.utils import get_column_letter
 
 from hh import config, io
+from hh.analytics.donors import INTERNAL_ACCOUNT_IDS
 from hh.analytics.mailing import DON_FY_COLUMNS, GIVING_FYS, gifts_by_fy
 from hh.clean.accounts import clean_accounts
 from hh.clean.donations import clean_donations
@@ -224,10 +225,17 @@ def build() -> pd.DataFrame:
     # fresh id -> FY-giving lookup, computed directly from donations (not restricted to
     # mailing_list.parquet's prospect universe, so it covers every row including the
     # cat-7/do-not-contact edge cases that universe leaves out)
-    gfy = gifts_by_fy(clean_donations(accounts=clean_accounts()), GIVING_FYS)
+    accounts = clean_accounts()
+    gfy = gifts_by_fy(clean_donations(accounts=accounts), GIVING_FYS)
     gfy = gfy.assign(id=gfy["id"].astype(str)).set_index("id")
     fy2026 = gfy["don_fy2026"]
     fy5yr = gfy[DON_FY_COLUMNS].sum(axis=1)
+    # the cash-drawer/online-registration placeholder accounts aren't real households -
+    # exclude them from any ranking over "biggest donors" (mirrors build_mailing_list())
+    internal_ids = set(
+        accounts.loc[accounts["account_id"].isin(INTERNAL_ACCOUNT_IDS), "id"]
+        .dropna().astype(str)
+    )
 
     # -- Neon side: categories in priority order over living, contactable rows -------
     neon = m[m["neon_hh_id"].notna()].copy()
@@ -343,7 +351,52 @@ def build() -> pd.DataFrame:
     }
     dnc_raw = _dnc_review(neon, dnc_mask, deceased_mask, book, b)
     board.attrs["dnc_review"] = _finalize(dnc_raw, fy2026, fy5yr, id_start=DNC_ID_START)
+    reception_raw = _reception_draft(board, book, b, m, fy5yr, internal_ids)
+    board.attrs["reception_draft"] = _finalize(reception_raw, fy2026, fy5yr, id_start=1)
     return board
+
+
+RECEPTION_TOP_N = 30  # Don, 2026-09-11: 34 FST sponsors + the 30 largest 5yr donors
+
+
+def _reception_draft(
+    board: pd.DataFrame, book: pd.DataFrame, b: pd.DataFrame, m: pd.DataFrame,
+    fy5yr: pd.Series, internal_ids: set[str],
+) -> pd.DataFrame:
+    """FST sponsors + HH's largest living 5-year donors, for reception planning.
+
+    The top-donor half is built fresh from the book/donations, not reused from `board`,
+    because the largest donors aren't guaranteed to be reachable through it - the ranking
+    isn't restricted to mailing_list.parquet's narrower prospect universe (same reason
+    category 7 needed a book-sourced fallback).
+    """
+    fst = board.loc[board["category"].eq(CATEGORY_LABELS[8]), BOARD_COLUMNS[1:]].copy()
+
+    living_ids = set(
+        book.loc[book["in_neon"] & ~book["deceased"].fillna(False), "neon_hh_id"]
+        .dropna().astype(str)
+    ) - internal_ids
+    ranked = fy5yr[fy5yr.index.isin(living_ids)].sort_values(ascending=False)
+    top = ranked.head(RECEPTION_TOP_N)
+
+    steward_map = (
+        m.assign(_id=m["neon_hh_id"].astype(str)).drop_duplicates("_id")
+        .set_index("_id")["steward"]
+    )
+    rows = []
+    for rank, (hh_id, _total) in enumerate(top.items(), start=1):
+        bk = b.loc[hh_id]
+        rows.append({
+            "mailing_name": _label_name(bk["name"]), "address": bk["address"],
+            "city": bk["city"], "state": bk["state_province"], "zip": bk["zip_code"],
+            "category": f"top {RECEPTION_TOP_N} 5yr donor", "email": bk["email"],
+            "phone": bk["phone"], "neon_hh_id": hh_id, "steward": steward_map.get(hh_id),
+            "notes": f"5yr total rank #{rank} of Neon donors",
+            "in_neon": True, "do_not_contact": bool(bk["do_not_contact"]),
+            "deceased": bool(bk["deceased"]),
+        })
+    donors = pd.DataFrame(rows, columns=BOARD_COLUMNS[1:])
+    return pd.concat([fst, donors], ignore_index=True)
 
 
 def _enrich(df: pd.DataFrame, fy2026: pd.Series, fy5yr: pd.Series) -> pd.DataFrame:
@@ -529,11 +582,13 @@ def main() -> None:
     md_path = config.layer_dir("processed") / MD_FILENAME.replace(".md", f"{suffix}.md")
     dnc_review = board.attrs["dnc_review"]
     not_in_neon = board[~board["in_neon"]].reset_index(drop=True)
+    reception_draft = board.attrs["reception_draft"]
     with pd.ExcelWriter(xlsx, engine="openpyxl") as xw:
         board[PRINTER_COLUMNS].to_excel(xw, sheet_name="printer", index=False)
         board[BOARD_COLUMNS].to_excel(xw, sheet_name="board", index=False)
         dnc_review[BOARD_COLUMNS].to_excel(xw, sheet_name="do_not_contact", index=False)
         not_in_neon[BOARD_COLUMNS].to_excel(xw, sheet_name="not_in_neon", index=False)
+        reception_draft[BOARD_COLUMNS].to_excel(xw, sheet_name="reception_draft", index=False)
         for name, sheet in xw.sheets.items():
             sheet.freeze_panes = "A2"
             columns = PRINTER_COLUMNS if name == "printer" else BOARD_COLUMNS
@@ -550,8 +605,9 @@ def main() -> None:
     print(f"\n{len(board)} households -> {xlsx.name}, {md_path.name}")
     print(
         f"printer sheet leftmost, then board, then do_not_contact ({len(dnc_review)}), "
-        f"then not_in_neon ({len(not_in_neon)}, so they can be added to Neon); "
-        f"sorted by surname; ids 1..{len(board)}"
+        f"then not_in_neon ({len(not_in_neon)}, so they can be added to Neon), "
+        f"then reception_draft ({len(reception_draft)} = FST sponsors + top "
+        f"{RECEPTION_TOP_N} 5yr donors); sorted by surname; ids 1..{len(board)}"
     )
 
 
