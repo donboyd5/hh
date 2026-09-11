@@ -124,6 +124,14 @@ BUSINESS_ADDRESS = {
     "rana bitar and joseph jacob": ("2125 River Rd Ste 100", "Niskayuna", "NY", "12309"),
 }
 
+# cat 7 (MfS donor in Neon): Don reviewed all 8 Neon/MfS address conflicts in this
+# category (2026-09-11) and confirmed Neon is correct for everyone except these two,
+# who carry a real second (NYC) address on the MfS list - noted, not conflict-flagged.
+MFS_2ND_ADDRESS = {
+    "sarah gallagher": "1136 First Avenue, New York, NY 10065",
+    "susan crile": "168 West 86th Street, Apt. 6B, New York, NY 10024",
+}
+
 
 def _clean_zip(z) -> str | None:
     """Label-ready ZIP: leading zeros restored (Excel/Neon drop them for New England),
@@ -266,8 +274,9 @@ def build() -> pd.DataFrame:
             if hh_id in in_m_ids
             else "on the MfS donor list; not otherwise in the prospect universe"
         )
-        if bool(bk["address_conflict"]):
-            note = "address conflict - sources disagree; " + note
+        second_addr = MFS_2ND_ADDRESS.get(_norm(bk["name"]))
+        if second_addr:
+            note = f"2nd address: {second_addr}; {note}"
         rows.append({
             "mailing_name": _label_name(bk["name"]), "address": bk["address"],
             "city": bk["city"], "state": bk["state_province"], "zip": bk["zip_code"],
