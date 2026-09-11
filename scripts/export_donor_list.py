@@ -6,8 +6,8 @@ priority order so each household lands in exactly one; every row carries an addr
 board sheet's notes). Successive cuts change the constants below and re-run.
 
 Outputs (data/20_processed/, never published):
-  donor-list-draft.xlsx  - sheet 1 "board" (full detail), sheet 2 "printer" (labels)
-  donor-list-draft.md    - annotated category table, individuals listed per category
+  final-mailing-list-draft.xlsx  - sheet 1 "board" (full detail), sheet 2 "printer" (labels)
+  final-mailing-list-draft.md    - annotated category table, individuals listed per category
 
 Usage:
     python scripts/export_donor_list.py [suffix]   # suffix labels draft file names
@@ -35,7 +35,7 @@ MIN_NEW_ACCOUNT_REG = 50.0  # cat 5: Judy's new-accounts workbook, lifetime regi
 # cat 6: the silent keep-list rows below every bar, minus rulings (Don, 2026-09-10)
 LAPSED_EXCLUDE = {"george scurria"}
 
-# cat 8: MfS rows ruled the SAME household as an existing Neon record (Don, 2026-09-10:
+# cat 9: MfS rows ruled the SAME household as an existing Neon record (Don, 2026-09-10:
 # "definitely don't want to add Akland" + the near-certain fuzzy matches accepted for
 # draft 1). They fold into their Neon households, which the Neon categories already
 # count — they are not new prospects.
@@ -56,11 +56,12 @@ CATEGORY_LABELS = {
     4: "engaged non-donor $500+ spend",           # no 5-yr gift; classes/tickets spend
     5: "new account FY25-26 $50+ reg",            # Judy's list, lifetime registrations
     6: "lapsed donor - keep",                     # hand-picked, below every bar
-    7: "FST sponsor w/ address",                  # Fort Salem, not in Neon
-    8: "MfS donor w/ address",                    # Music from Salem, not in Neon
+    7: "MfS donor in Neon, no other category",    # Don, 2026-09-11: keep the whole MfS list
+    8: "FST sponsor w/ address",                  # Fort Salem, not in Neon
+    9: "MfS donor w/ address",                    # Music from Salem, not in Neon
 }
 
-SUPER = {k: ("In Neon" if k <= 6 else "Not in Neon") for k in CATEGORY_LABELS}
+SUPER = {k: ("In Neon" if k <= 7 else "Not in Neon") for k in CATEGORY_LABELS}
 
 PRINTER_COLUMNS = ["id", "mailing_name", "address", "city", "state", "zip"]
 BOARD_COLUMNS = PRINTER_COLUMNS + [
@@ -194,6 +195,24 @@ def build() -> pd.DataFrame:
     silent = alive["src_silent_selected"] & ~(cat[1] | cat[2] | cat[3] | cat[4] | cat[5])
     silent &= ~alive["household_name"].map(lambda n: _norm(n) in LAPSED_EXCLUDE)
 
+    # cat 7: every household on the original MfS donor list, including ones already in
+    # Neon that failed every other screen above, or that aren't in the mailing-list
+    # prospect universe (m) at all (Don, 2026-09-11: "we'll want to include ALL of our
+    # original list, even if in neon and failed the neon screens" - 12 of the 17 MfS
+    # donors matched to a Neon household never made mailing_list.parquet's cut because
+    # that table only holds households meeting some other prospect criterion already).
+    # Sourced straight from the book (not `alive`/`m`) so it reaches households `m`
+    # never included; the same deceased/do-not-contact set-aside applies here by hand.
+    mfs_neon_ids = set(
+        book.loc[book["mfs_donor"].fillna(False) & book["in_neon"], "neon_hh_id"]
+        .dropna().astype(str)
+    )
+    captured_ids = set(
+        alive.loc[cat[1] | cat[2] | cat[3] | cat[4] | cat[5] | silent, "neon_hh_id"].astype(str)
+    ) | set(band_hit["neon_hh_id"].astype(str))
+    cat7_ids = sorted(mfs_neon_ids - captured_ids)
+    in_m_ids = set(neon["neon_hh_id"].astype(str))
+
     rows = []
     for k in (1, 2, 3, 4, 5):
         for r in alive[cat[k]].itertuples(index=False):
@@ -202,6 +221,24 @@ def build() -> pd.DataFrame:
         rows.append(_band_row(r, b))
     for r in alive[silent].itertuples(index=False):
         rows.append(_neon_row(r, b, 6))
+    for hh_id in cat7_ids:
+        bk = b.loc[hh_id]
+        if bool(bk["do_not_contact"]) or bool(bk["deceased"]):
+            continue
+        note = (
+            "on the MfS donor list; no other qualifying category"
+            if hh_id in in_m_ids
+            else "on the MfS donor list; not otherwise in the prospect universe"
+        )
+        if bool(bk["address_conflict"]):
+            note = "address conflict - sources disagree; " + note
+        rows.append({
+            "mailing_name": _label_name(bk["name"]), "address": bk["address"],
+            "city": bk["city"], "state": bk["state_province"], "zip": bk["zip_code"],
+            "category": CATEGORY_LABELS[7], "email": bk["email"], "phone": bk["phone"],
+            "steward": None, "notes": note, "in_neon": True,
+            "do_not_contact": bool(bk["do_not_contact"]), "deceased": bool(bk["deceased"]),
+        })
 
     # -- not-in-Neon side ------------------------------------------------------------
     solo = book[~book["in_neon"]]
@@ -211,7 +248,7 @@ def build() -> pd.DataFrame:
             {
                 "mailing_name": _label_name(r.name), "address": r.address, "city": r.city,
                 "state": r.state_province, "zip": r.zip_code,
-                "category": CATEGORY_LABELS[7],
+                "category": CATEGORY_LABELS[8],
                 "email": r.research_email, "phone": r.research_phone, "steward": None,
                 "notes": f"FST {r.fst_best_tier} {r.fst_years}; addr {r.address_source}",
                 "in_neon": False, "do_not_contact": bool(r.do_not_contact) if pd.notna(r.do_not_contact) else None,
@@ -231,7 +268,7 @@ def build() -> pd.DataFrame:
             {
                 "mailing_name": _label_name(r.name), "address": r.address, "city": r.city,
                 "state": r.state_province, "zip": r.zip_code,
-                "category": CATEGORY_LABELS[8],
+                "category": CATEGORY_LABELS[9],
                 "email": r.research_email, "phone": r.research_phone, "steward": None,
                 "notes": note,
                 "in_neon": False, "do_not_contact": bool(r.do_not_contact) if pd.notna(r.do_not_contact) else None,
@@ -254,13 +291,15 @@ def build() -> pd.DataFrame:
     return board
 
 
-def _neon_row(r, book_indexed: pd.DataFrame, k: int) -> dict:
+def _neon_row(r, book_indexed: pd.DataFrame, k: int, extra_note: str | None = None) -> dict:
     bk = book_indexed.loc[str(r.neon_hh_id)]
     notes = []
     if bool(bk["address_conflict"]):
         notes.append("address conflict - sources disagree")
     if isinstance(bk["web_note"], str) and bk["web_note"]:
         notes.append(str(bk["web_note"])[:80])
+    if extra_note:
+        notes.append(extra_note)
     return {
         "mailing_name": _label_name(r.household_name),
         "address": bk["address"], "city": bk["city"], "state": bk["state_province"],
@@ -307,8 +346,9 @@ def _md(board: pd.DataFrame) -> str:
         CATEGORY_LABELS[4]: f"no gift in five years; ${MIN_ENGAGED_SPEND:.0f}+ classes/tickets spend",
         CATEGORY_LABELS[5]: f"Neon account new in FY25-26 with ${MIN_NEW_ACCOUNT_REG:.0f}+ lifetime registrations",
         CATEGORY_LABELS[6]: "lapsed donors kept by hand (pre-2019 hopes); George Scurria removed 9/10",
-        CATEGORY_LABELS[7]: "Fort Salem sponsor, not in Neon, address found (2 are business addresses: Bitar, Bulford)",
-        CATEGORY_LABELS[8]: "Music from Salem donor, not in Neon, address on the MfS list",
+        CATEGORY_LABELS[7]: "on the MfS donor list; in Neon but didn't pass any other screen above",
+        CATEGORY_LABELS[8]: "Fort Salem sponsor, not in Neon, address found (2 are business addresses: Bitar, Bulford)",
+        CATEGORY_LABELS[9]: "Music from Salem donor, not in Neon, address on the MfS list",
     }
     super_label = ""
     for k in sorted(CATEGORY_LABELS):
