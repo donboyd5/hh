@@ -24,8 +24,8 @@ from hh import config, io
 from hh.external import mailing as ml
 from hh.external.mailing import match_households
 
-XLSX_FILENAME = "donor-list-draft.xlsx"
-MD_FILENAME = "donor-list-draft.md"
+XLSX_FILENAME = "final-mailing-list-draft.xlsx"
+MD_FILENAME = "final-mailing-list-draft.md"
 
 # -- category rules (Don, 2026-09-10, draft 1) -------------------------------------
 MIN_DONOR_5YR = 150.0       # cat 2: gave to no campaign, FY22-26 total at least this
@@ -63,7 +63,14 @@ CATEGORY_LABELS = {
 SUPER = {k: ("In Neon" if k <= 6 else "Not in Neon") for k in CATEGORY_LABELS}
 
 PRINTER_COLUMNS = ["id", "mailing_name", "address", "city", "state", "zip"]
-BOARD_COLUMNS = PRINTER_COLUMNS + ["category", "email", "phone", "steward", "notes"]
+BOARD_COLUMNS = PRINTER_COLUMNS + [
+    "category", "email", "phone", "steward", "notes",
+    "in_neon", "do_not_contact", "deceased",
+]
+
+# below-table individual rosters (in the md): only for categories small enough that a
+# full name list is itself useful, not a wall of text (Don, 2026-09-11)
+INDIVIDUAL_LIST_MAX = 10
 
 # "Ann & Bob Smith" -> ("smith", "ann"): labels sort by surname, then first listed name
 _JUNK = re.compile(r"\b(?:mr|mrs|ms|dr|and|the|family)\b|[.,]", re.I)
@@ -207,6 +214,8 @@ def build() -> pd.DataFrame:
                 "category": CATEGORY_LABELS[7],
                 "email": r.research_email, "phone": r.research_phone, "steward": None,
                 "notes": f"FST {r.fst_best_tier} {r.fst_years}; addr {r.address_source}",
+                "in_neon": False, "do_not_contact": bool(r.do_not_contact) if pd.notna(r.do_not_contact) else None,
+                "deceased": bool(r.deceased),
             }
         )
     mfs = solo[
@@ -225,6 +234,8 @@ def build() -> pd.DataFrame:
                 "category": CATEGORY_LABELS[8],
                 "email": r.research_email, "phone": r.research_phone, "steward": None,
                 "notes": note,
+                "in_neon": False, "do_not_contact": bool(r.do_not_contact) if pd.notna(r.do_not_contact) else None,
+                "deceased": bool(r.deceased),
             }
         )
 
@@ -256,6 +267,8 @@ def _neon_row(r, book_indexed: pd.DataFrame, k: int) -> dict:
         "zip": bk["zip_code"], "category": CATEGORY_LABELS[k],
         "email": bk["email"], "phone": bk["phone"], "steward": r.steward,
         "notes": "; ".join(notes) or None,
+        "in_neon": True, "do_not_contact": bool(bk["do_not_contact"]),
+        "deceased": bool(bk["deceased"]),
     }
 
 
@@ -267,18 +280,21 @@ def _band_row(r, book_indexed: pd.DataFrame) -> dict:
         "zip": bk["zip_code"], "category": CATEGORY_LABELS[5],
         "email": bk["email"], "phone": bk["phone"], "steward": None,
         "notes": "new account, $50-99 lifetime registrations",
+        "in_neon": True, "do_not_contact": bool(bk["do_not_contact"]),
+        "deceased": bool(bk["deceased"]),
     }
 
 
 def _md(board: pd.DataFrame) -> str:
     qa = board.attrs.get("qa", {})
     lines = [
-        "# Donor list - first draft",
+        "# Final mailing list - draft 1",
         "",
         f"*{len(board)} households, every row addressed (best address per the",
         "address-book precedence: Neon > assessment-roll strong > MfS list > roll",
         "probable > web business). Sorted by surname. Board sheet carries category,",
-        "contact info, steward, and notes; printer sheet is the label feed.*",
+        "contact info, steward, notes, and in_neon/do_not_contact/deceased flags;",
+        "printer sheet is the label feed.*",
         "",
         "| Group | # | Category | Definition | Households |",
         "|---|---|---|---|---:|",
@@ -325,10 +341,13 @@ def _md(board: pd.DataFrame) -> str:
         "(board add, Kelvin steward) await address research and join a later cut.*",
         "",
     ]
-    # individuals, listed per category below the table
+    # individuals, listed per category below the table - only for categories small
+    # enough that a full roster is itself useful (Don, 2026-09-11)
     for k in sorted(CATEGORY_LABELS):
         label = CATEGORY_LABELS[k]
         grp = board[board["category"].eq(label)]
+        if len(grp) > INDIVIDUAL_LIST_MAX:
+            continue
         lines.append(f"## {k}. {label} — {len(grp)} households")
         lines.append("")
         for r in grp.sort_values("mailing_name", key=lambda s: s.map(_sort_key)).itertuples(index=False):
