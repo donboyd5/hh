@@ -53,14 +53,41 @@ MANUAL_NEON_NOTE = (
 )
 
 
+_ROLL_JUNK = re.compile(r"\b(?:mr|mrs|ms|dr|and|the|family)\b|[.,&]", re.I)
+
+
 def _norm(name: str) -> str:
     return re.sub(r"\s+", " ", str(name)).strip().lower()
+
+
+def _norm_street(s) -> str:
+    return re.sub(r"[^a-z0-9]", "", str(s).lower())
 
 
 def _research() -> dict:
     if not RESEARCH_FILE.exists():
         return {}
     return (yaml.safe_load(RESEARCH_FILE.read_text()) or {}).get("notes") or {}
+
+
+def _roll_corroborates(name: str, address, roll: pd.DataFrame) -> bool:
+    """True if the assessment roll independently has an owner-name hit for `name`
+    whose street matches `address` (guards against common-name false positives on a
+    39k-row multi-county roll - a name hit alone isn't enough, the street must agree)."""
+    if not address:
+        return False
+    s = re.sub(r"\(.*?\)", "", str(name))
+    s = re.sub(r"\s+", " ", _ROLL_JUNK.sub(" ", s)).strip()
+    toks = s.split()
+    if len(toks) < 2:
+        return False
+    last, first = toks[-1], toks[0]
+    hits = roll[
+        roll["owners"].str.contains(re.escape(last), case=False, na=False)
+        & roll["owners"].str.contains(re.escape(first), case=False, na=False)
+    ]
+    target = _norm_street(address)[:8]
+    return any(target and (target in _norm_street(h) or _norm_street(h)[:8] in target) for h in hits["street"])
 
 
 def build() -> pd.DataFrame:
@@ -112,6 +139,20 @@ def build() -> pd.DataFrame:
         })
 
     df = pd.DataFrame(rows)
+
+    # independent public-source (assessment-roll) corroboration - meaningful mainly for
+    # the Neon-matched rows (Don, 2026-09-11: "which of those are in neon and have good
+    # addresses not just from neon but from public sources"); also checked for the
+    # roll/web rows themselves as a sanity cross-check, though those already cite the
+    # roll as their source
+    roll = io.read_parquet("interim", "assessment_rolls_2026.parquet")
+    df["roll_corroborated"] = [
+        _roll_corroborates(n, a, roll) for n, a in zip(df["name"], df["address"])
+    ]
+    df.loc[df["source"] == "assessment-roll", "roll_corroborated"] = True
+
+    df["good_address"] = df["confidence"].isin(["confirmed", "probable"])
+
     df["__key"] = df["name"].map(_norm)
     df = df.sort_values("__key").drop(columns="__key").reset_index(drop=True)
     df.insert(0, "id", range(1, len(df) + 1))
