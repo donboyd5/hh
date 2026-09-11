@@ -71,7 +71,7 @@ CATEGORY_LABELS = {
 
 SUPER = {k: ("In Neon" if k <= 7 else "Not in Neon") for k in CATEGORY_LABELS}
 
-PRINTER_COLUMNS = ["id", "mailing_name", "address", "city", "state", "zip"]
+PRINTER_COLUMNS = ["id", "mailing_name", "salutation", "address", "city", "state", "zip"]
 BOARD_COLUMNS = PRINTER_COLUMNS + [
     "category", "email", "phone",
     "neon_hh_id", "last_name", "donations_2025_26", "donations_5yr",
@@ -83,8 +83,8 @@ BOARD_COLUMNS = PRINTER_COLUMNS + [
 # having to widen every column by hand) and the plain-number format for the donation
 # columns ("comma formatted, no decimals, no dollar sign")
 COLUMN_WIDTHS = {
-    "mailing_name": 28, "address": 26, "city": 14, "category": 26, "email": 24,
-    "notes": 40,
+    "mailing_name": 28, "salutation": 18, "address": 26, "city": 14, "category": 26,
+    "email": 24, "notes": 40,
 }
 DOLLAR_COLUMNS = {"donations_2025_26", "donations_5yr"}
 DOLLAR_FORMAT = "#,##0"
@@ -217,10 +217,21 @@ def _classify(pop: pd.DataFrame) -> tuple[dict[int, pd.Series], pd.Series]:
     return cat, silent
 
 
+def _salutation_map(m: pd.DataFrame) -> pd.Series:
+    """id -> Neon salutation (household-level wins, individual fills gaps - already
+    resolved by build_mailing_list()); id -> None where a household isn't in `m` at all
+    (Don, 2026-09-11: "add the salutation (from neon) to ALL tabs of the workbook")."""
+    return (
+        m.assign(_id=m["neon_hh_id"].astype(str)).drop_duplicates("_id")
+        .set_index("_id")["salutation"]
+    )
+
+
 def build() -> pd.DataFrame:
     m = io.read_parquet("processed", "mailing_list.parquet")
     book = io.read_parquet("processed", "address_book.parquet")
     b = book.set_index(book["neon_hh_id"].fillna("__" + book["name"].astype(str)))
+    salutation = _salutation_map(m)
 
     # fresh id -> FY-giving lookup, computed directly from donations (not restricted to
     # mailing_list.parquet's prospect universe, so it covers every row including the
@@ -281,7 +292,7 @@ def build() -> pd.DataFrame:
         for r in alive[cat[k]].itertuples(index=False):
             rows.append(_neon_row(r, b, k))
     for r in band_hit.itertuples(index=False):
-        rows.append(_band_row(r, b))
+        rows.append(_band_row(r, b, salutation))
     for r in alive[silent].itertuples(index=False):
         rows.append(_neon_row(r, b, 6))
     for hh_id in cat7_ids:
@@ -297,7 +308,8 @@ def build() -> pd.DataFrame:
         if second_addr:
             note = f"2nd address: {second_addr}; {note}"
         rows.append({
-            "mailing_name": _label_name(bk["name"]), "address": bk["address"],
+            "mailing_name": _label_name(bk["name"]), "salutation": salutation.get(hh_id),
+            "address": bk["address"],
             "city": bk["city"], "state": bk["state_province"], "zip": bk["zip_code"],
             "category": CATEGORY_LABELS[7], "email": bk["email"], "phone": bk["phone"],
             "steward": None, "notes": note, "neon_hh_id": hh_id, "in_neon": True,
@@ -310,7 +322,8 @@ def build() -> pd.DataFrame:
     for r in fst.itertuples(index=False):
         rows.append(
             {
-                "mailing_name": _label_name(r.name), "address": r.address, "city": r.city,
+                "mailing_name": _label_name(r.name), "salutation": None,
+                "address": r.address, "city": r.city,
                 "state": r.state_province, "zip": r.zip_code,
                 "category": CATEGORY_LABELS[8],
                 "email": r.research_email, "phone": r.research_phone, "steward": None,
@@ -331,7 +344,8 @@ def build() -> pd.DataFrame:
             note += f"; possible Neon match: {r.possible_neon_match}"
         rows.append(
             {
-                "mailing_name": _label_name(r.name), "address": r.address, "city": r.city,
+                "mailing_name": _label_name(r.name), "salutation": None,
+                "address": r.address, "city": r.city,
                 "state": r.state_province, "zip": r.zip_code,
                 "category": CATEGORY_LABELS[9],
                 "email": r.research_email, "phone": r.research_phone, "steward": None,
@@ -349,7 +363,7 @@ def build() -> pd.DataFrame:
         "mfs_folded": len(MFS_FOLD_INTO_NEON),
         "dropped_no_address": n_built - len(board),
     }
-    dnc_raw = _dnc_review(neon, dnc_mask, deceased_mask, book, b)
+    dnc_raw = _dnc_review(neon, dnc_mask, deceased_mask, book, b, salutation)
     board.attrs["dnc_review"] = _finalize(dnc_raw, fy2026, fy5yr, id_start=DNC_ID_START)
     reception_raw = _reception_draft(board, book, b, m, fy5yr, internal_ids)
     board.attrs["reception_draft"] = _finalize(reception_raw, fy2026, fy5yr, id_start=1)
@@ -383,11 +397,13 @@ def _reception_draft(
         m.assign(_id=m["neon_hh_id"].astype(str)).drop_duplicates("_id")
         .set_index("_id")["steward"]
     )
+    salutation = _salutation_map(m)
     rows = []
     for rank, (hh_id, _total) in enumerate(top.items(), start=1):
         bk = b.loc[hh_id]
         rows.append({
-            "mailing_name": _label_name(bk["name"]), "address": bk["address"],
+            "mailing_name": _label_name(bk["name"]), "salutation": salutation.get(hh_id),
+            "address": bk["address"],
             "city": bk["city"], "state": bk["state_province"], "zip": bk["zip_code"],
             "category": f"top {RECEPTION_TOP_N} 5yr donor", "email": bk["email"],
             "phone": bk["phone"], "neon_hh_id": hh_id, "steward": steward_map.get(hh_id),
@@ -425,7 +441,7 @@ def _finalize(df: pd.DataFrame, fy2026: pd.Series, fy5yr: pd.Series, *, id_start
 
 def _dnc_review(
     neon: pd.DataFrame, dnc_mask: pd.Series, deceased_mask: pd.Series,
-    book: pd.DataFrame, b: pd.DataFrame,
+    book: pd.DataFrame, b: pd.DataFrame, salutation: pd.Series,
 ) -> pd.DataFrame:
     """Households excluded from the board only because do_not_contact is set (not
     deceased): everyone who WOULD have qualified for a category, for Don to examine
@@ -456,7 +472,8 @@ def _dnc_review(
     for hh_id in sorted((mfs_neon_ids & dnc_book_ids) - captured):
         bk = b.loc[hh_id]
         rows.append({
-            "mailing_name": _label_name(bk["name"]), "address": bk["address"],
+            "mailing_name": _label_name(bk["name"]), "salutation": salutation.get(hh_id),
+            "address": bk["address"],
             "city": bk["city"], "state": bk["state_province"], "zip": bk["zip_code"],
             "category": CATEGORY_LABELS[7], "email": bk["email"], "phone": bk["phone"],
             "steward": None, "notes": "on the MfS donor list; no other qualifying category",
@@ -475,7 +492,7 @@ def _neon_row(r, book_indexed: pd.DataFrame, k: int, extra_note: str | None = No
     if extra_note:
         notes.append(extra_note)
     return {
-        "mailing_name": _label_name(r.household_name),
+        "mailing_name": _label_name(r.household_name), "salutation": r.salutation,
         "address": bk["address"], "city": bk["city"], "state": bk["state_province"],
         "zip": bk["zip_code"], "category": CATEGORY_LABELS[k],
         "email": bk["email"], "phone": bk["phone"], "steward": r.steward,
@@ -485,10 +502,11 @@ def _neon_row(r, book_indexed: pd.DataFrame, k: int, extra_note: str | None = No
     }
 
 
-def _band_row(r, book_indexed: pd.DataFrame) -> dict:
+def _band_row(r, book_indexed: pd.DataFrame, salutation: pd.Series) -> dict:
     bk = book_indexed.loc[str(r.neon_hh_id)]
     return {
         "mailing_name": _label_name(r.household_name),
+        "salutation": salutation.get(str(r.neon_hh_id)),
         "address": bk["address"], "city": bk["city"], "state": bk["state_province"],
         "zip": bk["zip_code"], "category": CATEGORY_LABELS[5],
         "email": bk["email"], "phone": bk["phone"], "steward": None,
