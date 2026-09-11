@@ -161,6 +161,21 @@ def _tidy(board: pd.DataFrame) -> pd.DataFrame:
     return board
 
 
+def _classify(pop: pd.DataFrame) -> tuple[dict[int, pd.Series], pd.Series]:
+    """cat[1..5] + the silent-keep(6) test, applied to any Neon-side population
+    (the main `alive` pool, or the do-not-contact review pool - same rules either way)."""
+    cat: dict[int, pd.Series] = {}
+    cat[1] = pop["src_appeal_gift"] | (pop["don_appeal_window"].fillna(0) >= 10)
+    taken = cat[1].copy()
+    cat[2] = ~taken & (pop["don_5yr_total"].fillna(0) >= MIN_DONOR_5YR); taken |= cat[2]
+    cat[3] = ~taken & pop["steward"].notna() & (pop["don_5yr_total"].fillna(0) > 0); taken |= cat[3]
+    cat[4] = ~taken & pop["src_engaged_nondonor"]; taken |= cat[4]
+    cat[5] = ~taken & pop["src_new_accounts"]
+    silent = pop["src_silent_selected"] & ~(cat[1] | cat[2] | cat[3] | cat[4] | cat[5])
+    silent &= ~pop["household_name"].map(lambda n: _norm(n) in LAPSED_EXCLUDE)
+    return cat, silent
+
+
 def build() -> pd.DataFrame:
     m = io.read_parquet("processed", "mailing_list.parquet")
     book = io.read_parquet("processed", "address_book.parquet")
@@ -168,15 +183,11 @@ def build() -> pd.DataFrame:
 
     # -- Neon side: categories in priority order over living, contactable rows -------
     neon = m[m["neon_hh_id"].notna()].copy()
-    set_aside = neon[neon["deceased"].fillna(False) | neon["do_not_contact"].fillna(False)]
-    alive = neon[~neon.index.isin(set_aside.index)].copy()
-    cat: dict[str, int] = {}
-    cat[1] = alive["src_appeal_gift"] | (alive["don_appeal_window"].fillna(0) >= 10)
-    taken = cat[1].copy()
-    cat[2] = ~taken & (alive["don_5yr_total"].fillna(0) >= MIN_DONOR_5YR); taken |= cat[2]
-    cat[3] = ~taken & alive["steward"].notna() & (alive["don_5yr_total"].fillna(0) > 0); taken |= cat[3]
-    cat[4] = ~taken & alive["src_engaged_nondonor"]; taken |= cat[4]
-    cat[5] = ~taken & alive["src_new_accounts"]
+    deceased_mask = neon["deceased"].fillna(False).astype(bool)
+    dnc_mask = neon["do_not_contact"].fillna(False).astype(bool)
+    set_aside = neon[deceased_mask | dnc_mask]
+    alive = neon[~(deceased_mask | dnc_mask)].copy()
+    cat, silent = _classify(alive)
 
     # cat 5 expansion: Judy's $50-100 registration band, absent from the current list
     na = ml.load_new_accounts()
@@ -190,10 +201,6 @@ def build() -> pd.DataFrame:
     matched = match_households(band["household_name"], households, cities=band["city"] if "city" in band.columns else None)
     band = band.assign(neon_hh_id=matched["id"].values)
     band_hit = band[band["neon_hh_id"].notna()].drop_duplicates("neon_hh_id")
-
-    # cat 6: silent keep-list rows below every bar, minus exclusions
-    silent = alive["src_silent_selected"] & ~(cat[1] | cat[2] | cat[3] | cat[4] | cat[5])
-    silent &= ~alive["household_name"].map(lambda n: _norm(n) in LAPSED_EXCLUDE)
 
     # cat 7: every household on the original MfS donor list, including ones already in
     # Neon that failed every other screen above, or that aren't in the mailing-list
@@ -288,7 +295,58 @@ def build() -> pd.DataFrame:
         "mfs_folded": len(MFS_FOLD_INTO_NEON),
         "dropped_no_address": n_built - len(board),
     }
+    board.attrs["dnc_review"] = _dnc_review(neon, dnc_mask, deceased_mask, book, b)
     return board
+
+
+def _dnc_review(
+    neon: pd.DataFrame, dnc_mask: pd.Series, deceased_mask: pd.Series,
+    book: pd.DataFrame, b: pd.DataFrame,
+) -> pd.DataFrame:
+    """Households excluded from the board only because do_not_contact is set (not
+    deceased): everyone who WOULD have qualified for a category, for Don to examine
+    before deciding whether any should actually be mailed (Don, 2026-09-11: "I don't
+    think we want to [exclude every do-not-contact record] without examination")."""
+    dnc_pop = neon[dnc_mask & ~deceased_mask].copy()
+    dnc_pop = dnc_pop[dnc_pop["neon_hh_id"].astype(str).isin(set(b.index.astype(str)))]
+    dnc_cat, dnc_silent = _classify(dnc_pop)
+    rows = []
+    for k in (1, 2, 3, 4, 5):
+        for r in dnc_pop[dnc_cat[k]].itertuples(index=False):
+            rows.append(_neon_row(r, b, k))
+    for r in dnc_pop[dnc_silent].itertuples(index=False):
+        rows.append(_neon_row(r, b, 6))
+
+    mfs_neon_ids = set(
+        book.loc[book["mfs_donor"].fillna(False) & book["in_neon"], "neon_hh_id"]
+        .dropna().astype(str)
+    )
+    dnc_book_ids = set(
+        book.loc[book["do_not_contact"].fillna(False) & ~book["deceased"].fillna(False), "neon_hh_id"]
+        .dropna().astype(str)
+    )
+    captured = set(
+        dnc_pop.loc[dnc_cat[1] | dnc_cat[2] | dnc_cat[3] | dnc_cat[4] | dnc_cat[5] | dnc_silent, "neon_hh_id"]
+        .astype(str)
+    )
+    for hh_id in sorted((mfs_neon_ids & dnc_book_ids) - captured):
+        bk = b.loc[hh_id]
+        rows.append({
+            "mailing_name": _label_name(bk["name"]), "address": bk["address"],
+            "city": bk["city"], "state": bk["state_province"], "zip": bk["zip_code"],
+            "category": CATEGORY_LABELS[7], "email": bk["email"], "phone": bk["phone"],
+            "steward": None, "notes": "on the MfS donor list; no other qualifying category",
+            "in_neon": True, "do_not_contact": True, "deceased": False,
+        })
+
+    review = pd.DataFrame(rows, columns=BOARD_COLUMNS[1:])
+    if not len(review):
+        return review
+    review = _tidy(review)
+    review["__key"] = review["mailing_name"].map(_sort_key)
+    review = review.sort_values("__key").drop(columns="__key").reset_index(drop=True)
+    review.insert(0, "id", range(1, len(review) + 1))
+    return review
 
 
 def _neon_row(r, book_indexed: pd.DataFrame, k: int, extra_note: str | None = None) -> dict:
@@ -378,7 +436,10 @@ def _md(board: pd.DataFrame) -> str:
         f"households as duplicates; {qa.get('band_unmatched', 0)} new-account workbook rows",
         f"could not be matched to a Neon household; 41 of the 75 rule-B Fort Salem keeps",
         "have no researched address and stay out of this draft. Matt Witten & Nancy Seid",
-        "(board add, Kelvin steward) await address research and join a later cut.*",
+        "(board add, Kelvin steward) are not in Neon; await address research and join a",
+        f"later cut. {len(board.attrs.get('dnc_review', []))} do-not-contact households",
+        "would otherwise qualify for a category above - see the xlsx's do_not_contact",
+        "sheet for review before deciding whether any should actually be mailed.*",
         "",
     ]
     # individuals, listed per category below the table - only for categories small
@@ -403,9 +464,11 @@ def main() -> None:
     suffix = sys.argv[1] if len(sys.argv) > 1 else ""
     xlsx = config.layer_dir("processed") / XLSX_FILENAME.replace(".xlsx", f"{suffix}.xlsx")
     md_path = config.layer_dir("processed") / MD_FILENAME.replace(".md", f"{suffix}.md")
+    dnc_review = board.attrs["dnc_review"]
     with pd.ExcelWriter(xlsx, engine="openpyxl") as xw:
         board[BOARD_COLUMNS].to_excel(xw, sheet_name="board", index=False)
         board[PRINTER_COLUMNS].to_excel(xw, sheet_name="printer", index=False)
+        dnc_review[BOARD_COLUMNS].to_excel(xw, sheet_name="do_not_contact", index=False)
         for sheet in xw.sheets.values():
             sheet.freeze_panes = "A2"
             for cell in sheet[1]:
@@ -413,7 +476,7 @@ def main() -> None:
     md_path.write_text(_md(board))
     print(board["category"].value_counts().to_string())
     print(f"\n{len(board)} households -> {xlsx.name}, {md_path.name}")
-    print(f"board sheet leftmost, then printer; sorted by surname; ids 1..{len(board)}")
+    print(f"board sheet leftmost, then printer, then do_not_contact ({len(dnc_review)} households); sorted by surname; ids 1..{len(board)}")
 
 
 if __name__ == "__main__":
