@@ -6,7 +6,10 @@ priority order so each household lands in exactly one; every row carries an addr
 board sheet's notes). Successive cuts change the constants below and re-run.
 
 Outputs (data/20_processed/, never published):
-  final-mailing-list-draft.xlsx  - sheet 1 "board" (full detail), sheet 2 "printer" (labels)
+  final-mailing-list-draft.xlsx  - sheet 1 "board" (full detail), sheet 2 "printer" (labels),
+                                    sheet 3 "do_not_contact" (would-qualify-but-DNC review,
+                                    ids from 1000), sheet 4 "not_in_neon" (so they can be
+                                    added to Neon)
   final-mailing-list-draft.md    - annotated category table, individuals listed per category
 
 Usage:
@@ -21,6 +24,9 @@ import pandas as pd
 from openpyxl.styles import Font
 
 from hh import config, io
+from hh.analytics.mailing import DON_FY_COLUMNS, GIVING_FYS, gifts_by_fy
+from hh.clean.accounts import clean_accounts
+from hh.clean.donations import clean_donations
 from hh.external import mailing as ml
 from hh.external.mailing import match_households
 
@@ -65,13 +71,19 @@ SUPER = {k: ("In Neon" if k <= 7 else "Not in Neon") for k in CATEGORY_LABELS}
 
 PRINTER_COLUMNS = ["id", "mailing_name", "address", "city", "state", "zip"]
 BOARD_COLUMNS = PRINTER_COLUMNS + [
-    "category", "email", "phone", "steward", "notes",
+    "category", "email", "phone",
+    "last_name", "donations_2025_26", "donations_5yr", "neon_hh_id",
+    "steward", "notes",
     "in_neon", "do_not_contact", "deceased",
 ]
 
 # below-table individual rosters (in the md): only for categories small enough that a
 # full name list is itself useful, not a wall of text (Don, 2026-09-11)
 INDIVIDUAL_LIST_MAX = 10
+
+# do_not_contact sheet ids start here (Don, 2026-09-11: keep them visibly distinct from
+# the board sheet's own 1..N ids)
+DNC_ID_START = 1000
 
 # "Ann & Bob Smith" -> ("smith", "ann"): labels sort by surname, then first listed name
 _JUNK = re.compile(r"\b(?:mr|mrs|ms|dr|and|the|family)\b|[.,]", re.I)
@@ -84,6 +96,15 @@ def _sort_key(name: str) -> tuple[str, str]:
     if not toks:
         return ("", "")
     return (toks[-1].lower(), toks[0].lower())
+
+
+def _last_name(name: str) -> str | None:
+    """Same surname token _sort_key already uses to sort (last token once the
+    Mr/Mrs/and/parens junk is stripped), exposed as its own column."""
+    s = re.sub(r"\(.*?\)", "", str(name))
+    s = re.sub(r"\s+", " ", _JUNK.sub(" ", s)).strip()
+    toks = s.split()
+    return toks[-1] if toks else None
 
 
 def _norm(name: str) -> str:
@@ -181,6 +202,14 @@ def build() -> pd.DataFrame:
     book = io.read_parquet("processed", "address_book.parquet")
     b = book.set_index(book["neon_hh_id"].fillna("__" + book["name"].astype(str)))
 
+    # fresh id -> FY-giving lookup, computed directly from donations (not restricted to
+    # mailing_list.parquet's prospect universe, so it covers every row including the
+    # cat-7/do-not-contact edge cases that universe leaves out)
+    gfy = gifts_by_fy(clean_donations(accounts=clean_accounts()), GIVING_FYS)
+    gfy = gfy.assign(id=gfy["id"].astype(str)).set_index("id")
+    fy2026 = gfy["don_fy2026"]
+    fy5yr = gfy[DON_FY_COLUMNS].sum(axis=1)
+
     # -- Neon side: categories in priority order over living, contactable rows -------
     neon = m[m["neon_hh_id"].notna()].copy()
     deceased_mask = neon["deceased"].fillna(False).astype(bool)
@@ -243,7 +272,7 @@ def build() -> pd.DataFrame:
             "mailing_name": _label_name(bk["name"]), "address": bk["address"],
             "city": bk["city"], "state": bk["state_province"], "zip": bk["zip_code"],
             "category": CATEGORY_LABELS[7], "email": bk["email"], "phone": bk["phone"],
-            "steward": None, "notes": note, "in_neon": True,
+            "steward": None, "notes": note, "neon_hh_id": hh_id, "in_neon": True,
             "do_not_contact": bool(bk["do_not_contact"]), "deceased": bool(bk["deceased"]),
         })
 
@@ -258,6 +287,7 @@ def build() -> pd.DataFrame:
                 "category": CATEGORY_LABELS[8],
                 "email": r.research_email, "phone": r.research_phone, "steward": None,
                 "notes": f"FST {r.fst_best_tier} {r.fst_years}; addr {r.address_source}",
+                "neon_hh_id": None,
                 "in_neon": False, "do_not_contact": bool(r.do_not_contact) if pd.notna(r.do_not_contact) else None,
                 "deceased": bool(r.deceased),
             }
@@ -277,26 +307,47 @@ def build() -> pd.DataFrame:
                 "state": r.state_province, "zip": r.zip_code,
                 "category": CATEGORY_LABELS[9],
                 "email": r.research_email, "phone": r.research_phone, "steward": None,
-                "notes": note,
+                "notes": note, "neon_hh_id": None,
                 "in_neon": False, "do_not_contact": bool(r.do_not_contact) if pd.notna(r.do_not_contact) else None,
                 "deceased": bool(r.deceased),
             }
         )
 
-    board = pd.DataFrame(rows)
-    n_built = len(board)
-    board = _tidy(board[board["address"].notna()])  # every row must be mailable
-    board["__key"] = board["mailing_name"].map(_sort_key)
-    board = board.sort_values("__key").drop(columns="__key").reset_index(drop=True)
-    board.insert(0, "id", range(1, len(board) + 1))
+    n_built = len(rows)
+    board = _finalize(pd.DataFrame(rows), fy2026, fy5yr, id_start=1)
     board.attrs["qa"] = {
         "set_aside_deceased_dnc": len(set_aside),
         "band_unmatched": int(band["neon_hh_id"].isna().sum()),
         "mfs_folded": len(MFS_FOLD_INTO_NEON),
         "dropped_no_address": n_built - len(board),
     }
-    board.attrs["dnc_review"] = _dnc_review(neon, dnc_mask, deceased_mask, book, b)
+    dnc_raw = _dnc_review(neon, dnc_mask, deceased_mask, book, b)
+    board.attrs["dnc_review"] = _finalize(dnc_raw, fy2026, fy5yr, id_start=DNC_ID_START)
     return board
+
+
+def _enrich(df: pd.DataFrame, fy2026: pd.Series, fy5yr: pd.Series) -> pd.DataFrame:
+    """Adds last_name and the two donation-total columns (Don, 2026-09-11)."""
+    df = df.copy()
+    df["last_name"] = df["mailing_name"].map(_last_name)
+    has_id = df["neon_hh_id"].notna()
+    ids = df["neon_hh_id"].where(has_id, "")
+    df["donations_2025_26"] = ids.map(fy2026).fillna(0.0).where(has_id)
+    df["donations_5yr"] = ids.map(fy5yr).fillna(0.0).where(has_id)
+    return df
+
+
+def _finalize(df: pd.DataFrame, fy2026: pd.Series, fy5yr: pd.Series, *, id_start: int) -> pd.DataFrame:
+    """Address filter, label hygiene, enrichment, surname sort, and id numbering -
+    shared by the board and the do_not_contact review sheet so both go through the
+    exact same pipeline (Don, 2026-09-11: the review sheet should have every column
+    the board sheet has)."""
+    df = _tidy(df[df["address"].notna()])  # every row must be mailable
+    df = _enrich(df, fy2026, fy5yr)
+    df["__key"] = df["mailing_name"].map(_sort_key)
+    df = df.sort_values("__key").drop(columns="__key").reset_index(drop=True)
+    df.insert(0, "id", range(id_start, id_start + len(df)))
+    return df
 
 
 def _dnc_review(
@@ -336,17 +387,9 @@ def _dnc_review(
             "city": bk["city"], "state": bk["state_province"], "zip": bk["zip_code"],
             "category": CATEGORY_LABELS[7], "email": bk["email"], "phone": bk["phone"],
             "steward": None, "notes": "on the MfS donor list; no other qualifying category",
-            "in_neon": True, "do_not_contact": True, "deceased": False,
+            "neon_hh_id": hh_id, "in_neon": True, "do_not_contact": True, "deceased": False,
         })
-
-    review = pd.DataFrame(rows, columns=BOARD_COLUMNS[1:])
-    if not len(review):
-        return review
-    review = _tidy(review)
-    review["__key"] = review["mailing_name"].map(_sort_key)
-    review = review.sort_values("__key").drop(columns="__key").reset_index(drop=True)
-    review.insert(0, "id", range(1, len(review) + 1))
-    return review
+    return pd.DataFrame(rows, columns=BOARD_COLUMNS[1:])
 
 
 def _neon_row(r, book_indexed: pd.DataFrame, k: int, extra_note: str | None = None) -> dict:
@@ -363,7 +406,7 @@ def _neon_row(r, book_indexed: pd.DataFrame, k: int, extra_note: str | None = No
         "address": bk["address"], "city": bk["city"], "state": bk["state_province"],
         "zip": bk["zip_code"], "category": CATEGORY_LABELS[k],
         "email": bk["email"], "phone": bk["phone"], "steward": r.steward,
-        "notes": "; ".join(notes) or None,
+        "notes": "; ".join(notes) or None, "neon_hh_id": str(r.neon_hh_id),
         "in_neon": True, "do_not_contact": bool(bk["do_not_contact"]),
         "deceased": bool(bk["deceased"]),
     }
@@ -376,7 +419,7 @@ def _band_row(r, book_indexed: pd.DataFrame) -> dict:
         "address": bk["address"], "city": bk["city"], "state": bk["state_province"],
         "zip": bk["zip_code"], "category": CATEGORY_LABELS[5],
         "email": bk["email"], "phone": bk["phone"], "steward": None,
-        "notes": "new account, $50-99 lifetime registrations",
+        "notes": "new account, $50-99 lifetime registrations", "neon_hh_id": str(r.neon_hh_id),
         "in_neon": True, "do_not_contact": bool(bk["do_not_contact"]),
         "deceased": bool(bk["deceased"]),
     }
@@ -465,10 +508,12 @@ def main() -> None:
     xlsx = config.layer_dir("processed") / XLSX_FILENAME.replace(".xlsx", f"{suffix}.xlsx")
     md_path = config.layer_dir("processed") / MD_FILENAME.replace(".md", f"{suffix}.md")
     dnc_review = board.attrs["dnc_review"]
+    not_in_neon = board[~board["in_neon"]].reset_index(drop=True)
     with pd.ExcelWriter(xlsx, engine="openpyxl") as xw:
         board[BOARD_COLUMNS].to_excel(xw, sheet_name="board", index=False)
         board[PRINTER_COLUMNS].to_excel(xw, sheet_name="printer", index=False)
         dnc_review[BOARD_COLUMNS].to_excel(xw, sheet_name="do_not_contact", index=False)
+        not_in_neon[BOARD_COLUMNS].to_excel(xw, sheet_name="not_in_neon", index=False)
         for sheet in xw.sheets.values():
             sheet.freeze_panes = "A2"
             for cell in sheet[1]:
@@ -476,7 +521,11 @@ def main() -> None:
     md_path.write_text(_md(board))
     print(board["category"].value_counts().to_string())
     print(f"\n{len(board)} households -> {xlsx.name}, {md_path.name}")
-    print(f"board sheet leftmost, then printer, then do_not_contact ({len(dnc_review)} households); sorted by surname; ids 1..{len(board)}")
+    print(
+        f"board sheet leftmost, then printer, then do_not_contact ({len(dnc_review)}), "
+        f"then not_in_neon ({len(not_in_neon)}, so they can be added to Neon); "
+        f"sorted by surname; ids 1..{len(board)}"
+    )
 
 
 if __name__ == "__main__":
