@@ -22,6 +22,7 @@ import sys
 
 import pandas as pd
 from openpyxl.styles import Font
+from openpyxl.utils import get_column_letter
 
 from hh import config, io
 from hh.analytics.mailing import DON_FY_COLUMNS, GIVING_FYS, gifts_by_fy
@@ -72,10 +73,20 @@ SUPER = {k: ("In Neon" if k <= 7 else "Not in Neon") for k in CATEGORY_LABELS}
 PRINTER_COLUMNS = ["id", "mailing_name", "address", "city", "state", "zip"]
 BOARD_COLUMNS = PRINTER_COLUMNS + [
     "category", "email", "phone",
-    "last_name", "donations_2025_26", "donations_5yr", "neon_hh_id",
+    "neon_hh_id", "last_name", "donations_2025_26", "donations_5yr",
     "steward", "notes",
     "in_neon", "do_not_contact", "deceased",
 ]
+
+# xlsx column widths (Don, 2026-09-11: "see the names, and most of the address" without
+# having to widen every column by hand) and the plain-number format for the donation
+# columns ("comma formatted, no decimals, no dollar sign")
+COLUMN_WIDTHS = {
+    "mailing_name": 28, "address": 26, "city": 14, "category": 26, "email": 24,
+    "notes": 40,
+}
+DOLLAR_COLUMNS = {"donations_2025_26", "donations_5yr"}
+DOLLAR_FORMAT = "#,##0"
 
 # below-table individual rosters (in the md): only for categories small enough that a
 # full name list is itself useful, not a wall of text (Don, 2026-09-11)
@@ -519,19 +530,26 @@ def main() -> None:
     dnc_review = board.attrs["dnc_review"]
     not_in_neon = board[~board["in_neon"]].reset_index(drop=True)
     with pd.ExcelWriter(xlsx, engine="openpyxl") as xw:
-        board[BOARD_COLUMNS].to_excel(xw, sheet_name="board", index=False)
         board[PRINTER_COLUMNS].to_excel(xw, sheet_name="printer", index=False)
+        board[BOARD_COLUMNS].to_excel(xw, sheet_name="board", index=False)
         dnc_review[BOARD_COLUMNS].to_excel(xw, sheet_name="do_not_contact", index=False)
         not_in_neon[BOARD_COLUMNS].to_excel(xw, sheet_name="not_in_neon", index=False)
-        for sheet in xw.sheets.values():
+        for name, sheet in xw.sheets.items():
             sheet.freeze_panes = "A2"
+            columns = PRINTER_COLUMNS if name == "printer" else BOARD_COLUMNS
+            for i, col in enumerate(columns, start=1):
+                letter = get_column_letter(i)
+                sheet.column_dimensions[letter].width = COLUMN_WIDTHS.get(col, 12)
+                if col in DOLLAR_COLUMNS:
+                    for cell in sheet[letter][1:]:
+                        cell.number_format = DOLLAR_FORMAT
             for cell in sheet[1]:
                 cell.font = Font(bold=True)
     md_path.write_text(_md(board))
     print(board["category"].value_counts().to_string())
     print(f"\n{len(board)} households -> {xlsx.name}, {md_path.name}")
     print(
-        f"board sheet leftmost, then printer, then do_not_contact ({len(dnc_review)}), "
+        f"printer sheet leftmost, then board, then do_not_contact ({len(dnc_review)}), "
         f"then not_in_neon ({len(not_in_neon)}, so they can be added to Neon); "
         f"sorted by surname; ids 1..{len(board)}"
     )
