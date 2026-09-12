@@ -21,10 +21,11 @@ import re
 import sys
 
 import pandas as pd
-from openpyxl.styles import Font
+from openpyxl.styles import Font, PatternFill
 from openpyxl.utils import get_column_letter
 
 from hh import config, io
+from hh.analytics.donors import INTERNAL_ACCOUNT_IDS
 from hh.analytics.mailing import DON_FY_COLUMNS, GIVING_FYS, gifts_by_fy
 from hh.clean.accounts import clean_accounts
 from hh.clean.donations import clean_donations
@@ -70,7 +71,7 @@ CATEGORY_LABELS = {
 
 SUPER = {k: ("In Neon" if k <= 7 else "Not in Neon") for k in CATEGORY_LABELS}
 
-PRINTER_COLUMNS = ["id", "mailing_name", "address", "city", "state", "zip"]
+PRINTER_COLUMNS = ["id", "mailing_name", "salutation", "address", "city", "state", "zip"]
 BOARD_COLUMNS = PRINTER_COLUMNS + [
     "category", "email", "phone",
     "neon_hh_id", "last_name", "donations_2025_26", "donations_5yr",
@@ -82,11 +83,15 @@ BOARD_COLUMNS = PRINTER_COLUMNS + [
 # having to widen every column by hand) and the plain-number format for the donation
 # columns ("comma formatted, no decimals, no dollar sign")
 COLUMN_WIDTHS = {
-    "mailing_name": 28, "address": 26, "city": 14, "category": 26, "email": 24,
-    "notes": 40,
+    "mailing_name": 28, "salutation": 18, "address": 26, "city": 14, "category": 26,
+    "email": 24, "notes": 40,
 }
 DOLLAR_COLUMNS = {"donations_2025_26", "donations_5yr"}
 DOLLAR_FORMAT = "#,##0"
+
+# constructed (not from Neon) salutations get flagged for review - Don, 2026-09-11
+REVIEW_FILL = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
+REVIEW_FONT = Font(bold=True)
 
 # below-table individual rosters (in the md): only for categories small enough that a
 # full name list is itself useful, not a wall of text (Don, 2026-09-11)
@@ -116,6 +121,19 @@ def _last_name(name: str) -> str | None:
     s = re.sub(r"\s+", " ", _JUNK.sub(" ", s)).strip()
     toks = s.split()
     return toks[-1] if toks else None
+
+
+def _construct_salutation(name: str) -> str | None:
+    """Best-effort salutation when Neon has none on file: first name(s) only, e.g.
+    "Ann & Bob Smith" -> "Ann & Bob", "Katherine Kelleher & John Franklin" -> "Katherine
+    & John", "Elizabeth L. Ellard" -> "Elizabeth". A guess, not a lookup - callers flag
+    these for review rather than trusting them outright (Don, 2026-09-11)."""
+    s = re.sub(r"\s+", " ", str(name)).strip()
+    if not s:
+        return None
+    parts = re.split(r"\s*(?:&|\band\b)\s*", s, flags=re.I)
+    firsts = [p.split()[0] for p in parts if p.split()]
+    return " & ".join(firsts) if firsts else s
 
 
 def _norm(name: str) -> str:
@@ -216,18 +234,36 @@ def _classify(pop: pd.DataFrame) -> tuple[dict[int, pd.Series], pd.Series]:
     return cat, silent
 
 
+def _salutation_map(m: pd.DataFrame) -> pd.Series:
+    """id -> Neon salutation (household-level wins, individual fills gaps - already
+    resolved by build_mailing_list()); id -> None where a household isn't in `m` at all
+    (Don, 2026-09-11: "add the salutation (from neon) to ALL tabs of the workbook")."""
+    return (
+        m.assign(_id=m["neon_hh_id"].astype(str)).drop_duplicates("_id")
+        .set_index("_id")["salutation"]
+    )
+
+
 def build() -> pd.DataFrame:
     m = io.read_parquet("processed", "mailing_list.parquet")
     book = io.read_parquet("processed", "address_book.parquet")
     b = book.set_index(book["neon_hh_id"].fillna("__" + book["name"].astype(str)))
+    salutation = _salutation_map(m)
 
     # fresh id -> FY-giving lookup, computed directly from donations (not restricted to
     # mailing_list.parquet's prospect universe, so it covers every row including the
     # cat-7/do-not-contact edge cases that universe leaves out)
-    gfy = gifts_by_fy(clean_donations(accounts=clean_accounts()), GIVING_FYS)
+    accounts = clean_accounts()
+    gfy = gifts_by_fy(clean_donations(accounts=accounts), GIVING_FYS)
     gfy = gfy.assign(id=gfy["id"].astype(str)).set_index("id")
     fy2026 = gfy["don_fy2026"]
     fy5yr = gfy[DON_FY_COLUMNS].sum(axis=1)
+    # the cash-drawer/online-registration placeholder accounts aren't real households -
+    # exclude them from any ranking over "biggest donors" (mirrors build_mailing_list())
+    internal_ids = set(
+        accounts.loc[accounts["account_id"].isin(INTERNAL_ACCOUNT_IDS), "id"]
+        .dropna().astype(str)
+    )
 
     # -- Neon side: categories in priority order over living, contactable rows -------
     neon = m[m["neon_hh_id"].notna()].copy()
@@ -273,7 +309,7 @@ def build() -> pd.DataFrame:
         for r in alive[cat[k]].itertuples(index=False):
             rows.append(_neon_row(r, b, k))
     for r in band_hit.itertuples(index=False):
-        rows.append(_band_row(r, b))
+        rows.append(_band_row(r, b, salutation))
     for r in alive[silent].itertuples(index=False):
         rows.append(_neon_row(r, b, 6))
     for hh_id in cat7_ids:
@@ -289,7 +325,8 @@ def build() -> pd.DataFrame:
         if second_addr:
             note = f"2nd address: {second_addr}; {note}"
         rows.append({
-            "mailing_name": _label_name(bk["name"]), "address": bk["address"],
+            "mailing_name": _label_name(bk["name"]), "salutation": salutation.get(hh_id),
+            "address": bk["address"],
             "city": bk["city"], "state": bk["state_province"], "zip": bk["zip_code"],
             "category": CATEGORY_LABELS[7], "email": bk["email"], "phone": bk["phone"],
             "steward": None, "notes": note, "neon_hh_id": hh_id, "in_neon": True,
@@ -302,7 +339,8 @@ def build() -> pd.DataFrame:
     for r in fst.itertuples(index=False):
         rows.append(
             {
-                "mailing_name": _label_name(r.name), "address": r.address, "city": r.city,
+                "mailing_name": _label_name(r.name), "salutation": None,
+                "address": r.address, "city": r.city,
                 "state": r.state_province, "zip": r.zip_code,
                 "category": CATEGORY_LABELS[8],
                 "email": r.research_email, "phone": r.research_phone, "steward": None,
@@ -323,7 +361,8 @@ def build() -> pd.DataFrame:
             note += f"; possible Neon match: {r.possible_neon_match}"
         rows.append(
             {
-                "mailing_name": _label_name(r.name), "address": r.address, "city": r.city,
+                "mailing_name": _label_name(r.name), "salutation": None,
+                "address": r.address, "city": r.city,
                 "state": r.state_province, "zip": r.zip_code,
                 "category": CATEGORY_LABELS[9],
                 "email": r.research_email, "phone": r.research_phone, "steward": None,
@@ -341,19 +380,72 @@ def build() -> pd.DataFrame:
         "mfs_folded": len(MFS_FOLD_INTO_NEON),
         "dropped_no_address": n_built - len(board),
     }
-    dnc_raw = _dnc_review(neon, dnc_mask, deceased_mask, book, b)
+    dnc_raw = _dnc_review(neon, dnc_mask, deceased_mask, book, b, salutation)
     board.attrs["dnc_review"] = _finalize(dnc_raw, fy2026, fy5yr, id_start=DNC_ID_START)
+    reception_raw = _reception_draft(board, book, b, m, fy5yr, internal_ids)
+    board.attrs["reception_draft"] = _finalize(reception_raw, fy2026, fy5yr, id_start=1)
     return board
 
 
+RECEPTION_TOP_N = 30  # Don, 2026-09-11: 34 FST sponsors + the 30 largest 5yr donors
+
+
+def _reception_draft(
+    board: pd.DataFrame, book: pd.DataFrame, b: pd.DataFrame, m: pd.DataFrame,
+    fy5yr: pd.Series, internal_ids: set[str],
+) -> pd.DataFrame:
+    """FST sponsors + HH's largest living 5-year donors, for reception planning.
+
+    The top-donor half is built fresh from the book/donations, not reused from `board`,
+    because the largest donors aren't guaranteed to be reachable through it - the ranking
+    isn't restricted to mailing_list.parquet's narrower prospect universe (same reason
+    category 7 needed a book-sourced fallback).
+    """
+    fst = board.loc[board["category"].eq(CATEGORY_LABELS[8]), BOARD_COLUMNS[1:]].copy()
+
+    living_ids = set(
+        book.loc[book["in_neon"] & ~book["deceased"].fillna(False), "neon_hh_id"]
+        .dropna().astype(str)
+    ) - internal_ids
+    ranked = fy5yr[fy5yr.index.isin(living_ids)].sort_values(ascending=False)
+    top = ranked.head(RECEPTION_TOP_N)
+
+    steward_map = (
+        m.assign(_id=m["neon_hh_id"].astype(str)).drop_duplicates("_id")
+        .set_index("_id")["steward"]
+    )
+    salutation = _salutation_map(m)
+    rows = []
+    for rank, (hh_id, _total) in enumerate(top.items(), start=1):
+        bk = b.loc[hh_id]
+        rows.append({
+            "mailing_name": _label_name(bk["name"]), "salutation": salutation.get(hh_id),
+            "address": bk["address"],
+            "city": bk["city"], "state": bk["state_province"], "zip": bk["zip_code"],
+            "category": f"top {RECEPTION_TOP_N} 5yr donor", "email": bk["email"],
+            "phone": bk["phone"], "neon_hh_id": hh_id, "steward": steward_map.get(hh_id),
+            "notes": f"5yr total rank #{rank} of Neon donors",
+            "in_neon": True, "do_not_contact": bool(bk["do_not_contact"]),
+            "deceased": bool(bk["deceased"]),
+        })
+    donors = pd.DataFrame(rows, columns=BOARD_COLUMNS[1:])
+    return pd.concat([fst, donors], ignore_index=True)
+
+
 def _enrich(df: pd.DataFrame, fy2026: pd.Series, fy5yr: pd.Series) -> pd.DataFrame:
-    """Adds last_name and the two donation-total columns (Don, 2026-09-11)."""
+    """Adds last_name, the two donation-total columns, and fills any blank salutation
+    with a constructed guess (Don, 2026-09-11). `salutation_needs_review` is not an
+    exported column - main() reads it to highlight the constructed cells in the xlsx."""
     df = df.copy()
     df["last_name"] = df["mailing_name"].map(_last_name)
     has_id = df["neon_hh_id"].notna()
     ids = df["neon_hh_id"].where(has_id, "")
     df["donations_2025_26"] = ids.map(fy2026).fillna(0.0).where(has_id)
     df["donations_5yr"] = ids.map(fy5yr).fillna(0.0).where(has_id)
+    df["salutation_needs_review"] = df["salutation"].isna() | df["salutation"].astype(str).str.strip().eq("")
+    df.loc[df["salutation_needs_review"], "salutation"] = (
+        df.loc[df["salutation_needs_review"], "mailing_name"].map(_construct_salutation)
+    )
     return df
 
 
@@ -372,7 +464,7 @@ def _finalize(df: pd.DataFrame, fy2026: pd.Series, fy5yr: pd.Series, *, id_start
 
 def _dnc_review(
     neon: pd.DataFrame, dnc_mask: pd.Series, deceased_mask: pd.Series,
-    book: pd.DataFrame, b: pd.DataFrame,
+    book: pd.DataFrame, b: pd.DataFrame, salutation: pd.Series,
 ) -> pd.DataFrame:
     """Households excluded from the board only because do_not_contact is set (not
     deceased): everyone who WOULD have qualified for a category, for Don to examine
@@ -403,7 +495,8 @@ def _dnc_review(
     for hh_id in sorted((mfs_neon_ids & dnc_book_ids) - captured):
         bk = b.loc[hh_id]
         rows.append({
-            "mailing_name": _label_name(bk["name"]), "address": bk["address"],
+            "mailing_name": _label_name(bk["name"]), "salutation": salutation.get(hh_id),
+            "address": bk["address"],
             "city": bk["city"], "state": bk["state_province"], "zip": bk["zip_code"],
             "category": CATEGORY_LABELS[7], "email": bk["email"], "phone": bk["phone"],
             "steward": None, "notes": "on the MfS donor list; no other qualifying category",
@@ -422,7 +515,7 @@ def _neon_row(r, book_indexed: pd.DataFrame, k: int, extra_note: str | None = No
     if extra_note:
         notes.append(extra_note)
     return {
-        "mailing_name": _label_name(r.household_name),
+        "mailing_name": _label_name(r.household_name), "salutation": r.salutation,
         "address": bk["address"], "city": bk["city"], "state": bk["state_province"],
         "zip": bk["zip_code"], "category": CATEGORY_LABELS[k],
         "email": bk["email"], "phone": bk["phone"], "steward": r.steward,
@@ -432,10 +525,11 @@ def _neon_row(r, book_indexed: pd.DataFrame, k: int, extra_note: str | None = No
     }
 
 
-def _band_row(r, book_indexed: pd.DataFrame) -> dict:
+def _band_row(r, book_indexed: pd.DataFrame, salutation: pd.Series) -> dict:
     bk = book_indexed.loc[str(r.neon_hh_id)]
     return {
         "mailing_name": _label_name(r.household_name),
+        "salutation": salutation.get(str(r.neon_hh_id)),
         "address": bk["address"], "city": bk["city"], "state": bk["state_province"],
         "zip": bk["zip_code"], "category": CATEGORY_LABELS[5],
         "email": bk["email"], "phone": bk["phone"], "steward": None,
@@ -529,11 +623,17 @@ def main() -> None:
     md_path = config.layer_dir("processed") / MD_FILENAME.replace(".md", f"{suffix}.md")
     dnc_review = board.attrs["dnc_review"]
     not_in_neon = board[~board["in_neon"]].reset_index(drop=True)
+    reception_draft = board.attrs["reception_draft"]
+    sources = {
+        "printer": board, "board": board, "do_not_contact": dnc_review,
+        "not_in_neon": not_in_neon, "reception_draft": reception_draft,
+    }
     with pd.ExcelWriter(xlsx, engine="openpyxl") as xw:
         board[PRINTER_COLUMNS].to_excel(xw, sheet_name="printer", index=False)
         board[BOARD_COLUMNS].to_excel(xw, sheet_name="board", index=False)
         dnc_review[BOARD_COLUMNS].to_excel(xw, sheet_name="do_not_contact", index=False)
         not_in_neon[BOARD_COLUMNS].to_excel(xw, sheet_name="not_in_neon", index=False)
+        reception_draft[BOARD_COLUMNS].to_excel(xw, sheet_name="reception_draft", index=False)
         for name, sheet in xw.sheets.items():
             sheet.freeze_panes = "A2"
             columns = PRINTER_COLUMNS if name == "printer" else BOARD_COLUMNS
@@ -543,6 +643,12 @@ def main() -> None:
                 if col in DOLLAR_COLUMNS:
                     for cell in sheet[letter][1:]:
                         cell.number_format = DOLLAR_FORMAT
+                if col == "salutation":
+                    review = sources[name]["salutation_needs_review"]
+                    for cell, flagged in zip(sheet[letter][1:], review):
+                        if flagged:
+                            cell.font = REVIEW_FONT
+                            cell.fill = REVIEW_FILL
             for cell in sheet[1]:
                 cell.font = Font(bold=True)
     md_path.write_text(_md(board))
@@ -550,8 +656,9 @@ def main() -> None:
     print(f"\n{len(board)} households -> {xlsx.name}, {md_path.name}")
     print(
         f"printer sheet leftmost, then board, then do_not_contact ({len(dnc_review)}), "
-        f"then not_in_neon ({len(not_in_neon)}, so they can be added to Neon); "
-        f"sorted by surname; ids 1..{len(board)}"
+        f"then not_in_neon ({len(not_in_neon)}, so they can be added to Neon), "
+        f"then reception_draft ({len(reception_draft)} = FST sponsors + top "
+        f"{RECEPTION_TOP_N} 5yr donors); sorted by surname; ids 1..{len(board)}"
     )
 
 
