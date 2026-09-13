@@ -39,7 +39,7 @@ CANDIDATES_PARQUET = "address_book_candidates.parquet"
 
 
 def _freeze_header(ws) -> None:
-    ws.freeze_panes = "A2"
+    ws.freeze_panes = "B2"  # house style: header row + first column frozen
     for cell in ws[1]:
         cell.font = Font(bold=True)
 
