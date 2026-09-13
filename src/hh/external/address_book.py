@@ -72,6 +72,13 @@ ADDRESS_CORRECTIONS = {
     "Cynthia Mangsen": {"city": "North Bennington"},
 }
 
+# Board-nominated adds whose address Don supplied by hand (2026-09-13) - fills a row
+# that has no source address at all (unlike ADDRESS_CORRECTIONS, which fixes a defect
+# in a source that did carry one). Keyed by book name; re-check after a fresh Neon pull.
+BOARD_ADD_ADDRESSES = {
+    "Elsa Jean Brancaleone": ("74 Randolph Road", "White Plains", "NY", "10607"),
+}
+
 # streets compared for conflicts after casefold + punctuation/whitespace squeeze
 _STREET_NORM = re.compile(r"[^a-z0-9]+")
 
@@ -293,6 +300,13 @@ def build_address_book(
         at = book["name"].eq(name)
         for col, val in fixes.items():
             book.loc[at, col] = val
+    # board-add addresses supply what no source carried at all
+    for name, (street, city, state, zip_) in BOARD_ADD_ADDRESSES.items():
+        at = book["name"].eq(name)
+        book.loc[at, ["address", "city", "state_province", "zip_code"]] = [
+            street, city, state, zip_
+        ]
+        book.loc[at, "address_source"] = "board-add"
 
     # -- mailing-list context: the letter it would get, Don's notes --------------------
     if not mailing_list.empty:
