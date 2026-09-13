@@ -67,9 +67,16 @@ CATEGORY_LABELS = {
     7: "MfS donor in Neon, no other category",    # Don, 2026-09-11: keep the whole MfS list
     8: "FST sponsor w/ address",                  # Fort Salem, not in Neon
     9: "MfS donor w/ address",                    # Music from Salem, not in Neon
+    10: "board add - in Neon",                    # Don-nominated, in Neon, no screen passed
+    11: "board add - not in Neon",                # Don-nominated, address supplied by hand
 }
 
-SUPER = {k: ("In Neon" if k <= 7 else "Not in Neon") for k in CATEGORY_LABELS}
+IN_NEON_CATEGORIES = {1, 2, 3, 4, 5, 6, 7, 10}
+SUPER = {k: ("In Neon" if k in IN_NEON_CATEGORIES else "Not in Neon") for k in CATEGORY_LABELS}
+
+# md display order keeps the In-Neon / Not-in-Neon groups contiguous even though the
+# board-add numbers (10/11) were assigned after 8/9 already existed
+CATEGORY_DISPLAY_ORDER = [1, 2, 3, 4, 5, 6, 7, 10, 8, 9, 11]
 
 PRINTER_COLUMNS = ["id", "mailing_name", "salutation", "address", "city", "state", "zip"]
 BOARD_COLUMNS = PRINTER_COLUMNS + [
@@ -159,6 +166,30 @@ BUSINESS_ADDRESS = {
 MFS_2ND_ADDRESS = {
     "sarah gallagher": "1136 First Avenue, New York, NY 10065",
     "susan crile": "168 West 86th Street, Apt. 6B, New York, NY 10024",
+}
+
+# Hand rulings (Don, 2026-09-13), applied on top of every category path so the
+# household cannot resurface through a different screen:
+#   - Joan Duff-Bohrer is Neon household "Joan Bohrer & Stephen Schatz" (543): removed
+#     at Don's direction; her partner Stephen Schatz is deceased (also recorded in the
+#     md - worth having Judy mark him deceased in Neon).
+#   - Kenneth Strickler (2344): Don believes he has moved. His MfS row folds into this
+#     same Neon household, so excluding both name forms covers either path.
+MAILING_EXCLUDE = {"joan bohrer & stephen schatz", "kenneth strickler", "ken strickler"}
+
+
+def _excluded(name: str) -> bool:
+    return _norm(name) in MAILING_EXCLUDE
+
+
+# Board adds (Don, 2026-09-13): hand-nominated households no screen catches. Keyed by
+# the book name (normalized); the note is Don's reason. In-Neon keys land in category
+# 10 (Carol Brownell: $1.50 in five years, no steward, no spend bar); not-in-Neon keys
+# with a hand-supplied address (see BOARD_ADD_ADDRESSES in the address book) land in
+# category 11. Re-check the keys after a fresh Neon pull.
+BOARD_ADD_NOTES = {
+    "carol brownell": "board add (Don 2026-09-13); failed every screen; Neon spelling of first name confirmed",
+    "elsa jean brancaleone": "board add (Don 2026-09-13); personal friend; Don expects $500+ gift",
 }
 
 
@@ -368,12 +399,45 @@ def build() -> pd.DataFrame:
             }
         )
 
+    # -- board adds (Don, 2026-09-13) -----------------------------------------------
+    for key, note in BOARD_ADD_NOTES.items():
+        for r in book[book["name"].map(lambda n: _norm(n) == key)].itertuples(index=False):
+            if r.in_neon:
+                hh_id = str(r.neon_hh_id)
+                if hh_id in captured_ids or bool(r.deceased) or bool(r.do_not_contact):
+                    continue  # a real screen already caught it, or it's set aside
+                rows.append({
+                    "mailing_name": _label_name(r.name), "salutation": salutation.get(hh_id),
+                    "address": r.address, "city": r.city, "state": r.state_province,
+                    "zip": r.zip_code, "category": CATEGORY_LABELS[10],
+                    "email": r.email, "phone": r.phone, "steward": None,
+                    "notes": note, "neon_hh_id": hh_id, "in_neon": True,
+                    "do_not_contact": bool(r.do_not_contact), "deceased": bool(r.deceased),
+                })
+            elif r.address is not None and not pd.isna(r.address) and (
+                r.fst_rule_b != "kept"  # an FST+friend household rides category 8
+                and not (r.mfs_donor if pd.notna(r.mfs_donor) else False)  # MfS rides 7/9
+            ):
+                rows.append({
+                    "mailing_name": _label_name(r.name), "salutation": None,
+                    "address": r.address, "city": r.city, "state": r.state_province,
+                    "zip": r.zip_code, "category": CATEGORY_LABELS[11],
+                    "email": r.research_email, "phone": r.research_phone, "steward": None,
+                    "notes": note, "neon_hh_id": None, "in_neon": False,
+                    "do_not_contact": None, "deceased": bool(r.deceased),
+                })
+
+    # hand removals last, so they override every path above
+    hand_removed = sum(1 for r in rows if _excluded(r["mailing_name"]))
+    rows = [r for r in rows if not _excluded(r["mailing_name"])]
+
     n_built = len(rows)
     board = _finalize(pd.DataFrame(rows), fy2026, fy5yr, id_start=1)
     board.attrs["qa"] = {
         "set_aside_deceased_dnc": len(set_aside),
         "band_unmatched": int(band["neon_hh_id"].isna().sum()),
         "mfs_folded": len(MFS_FOLD_INTO_NEON),
+        "hand_removed": hand_removed,
         "dropped_no_address": n_built - len(board),
     }
     dnc_raw = _dnc_review(neon, dnc_mask, deceased_mask, book, b, salutation)
@@ -403,6 +467,9 @@ def _reception_draft(
         book.loc[book["in_neon"] & ~book["deceased"].fillna(False), "neon_hh_id"]
         .dropna().astype(str)
     ) - internal_ids
+    living_ids -= set(  # hand-removed households don't rank (Don, 2026-09-13)
+        book.loc[book["name"].map(_excluded), "neon_hh_id"].dropna().astype(str)
+    )
     ranked = fy5yr[fy5yr.index.isin(living_ids)].sort_values(ascending=False)
     top = ranked.head(RECEPTION_TOP_N)
 
@@ -498,6 +565,7 @@ def _dnc_review(
             "steward": None, "notes": "on the MfS donor list; no other qualifying category",
             "neon_hh_id": hh_id, "in_neon": True, "do_not_contact": True, "deceased": False,
         })
+    rows = [r for r in rows if not _excluded(r["mailing_name"])]  # hand removals apply here too
     return pd.DataFrame(rows, columns=BOARD_COLUMNS[1:])
 
 
@@ -560,9 +628,11 @@ def _md(board: pd.DataFrame) -> str:
         CATEGORY_LABELS[7]: "on the MfS donor list; in Neon but didn't pass any other screen above",
         CATEGORY_LABELS[8]: "Fort Salem sponsor, not in Neon, address found (2 are business addresses: Bitar, Bulford)",
         CATEGORY_LABELS[9]: "Music from Salem donor, not in Neon, address on the MfS list",
+        CATEGORY_LABELS[10]: "Don-nominated addition, already in Neon but no screen caught them",
+        CATEGORY_LABELS[11]: "Don-nominated addition, not in Neon, address supplied by hand",
     }
     super_label = ""
-    for k in sorted(CATEGORY_LABELS):
+    for k in CATEGORY_DISPLAY_ORDER:
         label = CATEGORY_LABELS[k]
         if SUPER[k] != super_label and super_label:
             n_super = sum(
@@ -594,10 +664,14 @@ def _md(board: pd.DataFrame) -> str:
         "would otherwise qualify for a category above - see the xlsx's do_not_contact",
         "sheet for review before deciding whether any should actually be mailed.*",
         "",
+        "*Removed by hand (Don, 2026-09-13): Joan Duff-Bohrer (Neon household \"Joan Bohrer",
+        "& Stephen Schatz\") at Don's direction - her partner Stephen Schatz is deceased;",
+        "Kenneth Strickler - Don believes he has moved.*",
+        "",
     ]
     # individuals, listed per category below the table - only for categories small
     # enough that a full roster is itself useful (Don, 2026-09-11)
-    for k in sorted(CATEGORY_LABELS):
+    for k in CATEGORY_DISPLAY_ORDER:
         label = CATEGORY_LABELS[k]
         grp = board[board["category"].eq(label)]
         if len(grp) > INDIVIDUAL_LIST_MAX:
