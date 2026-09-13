@@ -163,18 +163,14 @@ MFS_2ND_ADDRESS = {
 
 
 def _clean_zip(z) -> str | None:
-    """Label-ready ZIP: leading zeros restored (Excel/Neon drop them for New England),
-    ZIP+4 hyphenated. Anything unrecognizable passes through untouched."""
+    """Label-ready 5-digit ZIP (Don, 2026-09-13: "5-digit zip instead of 9 digit").
+    Leading zeros restored (Excel/Neon drop them for New England); ZIP+4 suffixes
+    dropped. Anything unrecognizable passes through untouched."""
     if pd.isna(z):
         return None
-    s = re.sub(r"[^0-9-]", "", str(z))
-    if re.fullmatch(r"\d{9}", s):
-        return f"{s[:5]}-{s[5:]}"
-    if re.fullmatch(r"\d{1,5}", s):
-        return s.zfill(5)
-    if re.fullmatch(r"\d{1,5}-\d{4}", s):
-        base, plus4 = s.split("-")
-        return f"{base.zfill(5)}-{plus4}"
+    s = re.sub(r"[^0-9]", "", str(z))
+    if re.fullmatch(r"\d{1,9}", s):
+        return s.zfill(5)[:5]
     return str(z).strip() or None
 
 
