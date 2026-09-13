@@ -28,6 +28,11 @@ def _inline(s: str) -> str:
     return s
 
 
+def _cell(s: str) -> str:
+    s = s.replace("**", "").strip()
+    return "No." if s == "#" else html.escape(s, quote=False)
+
+
 def render(md: str) -> str:
     out: list[str] = ["<html><head><meta charset='utf-8'></head><body>"]
     lines = md.splitlines()
@@ -56,7 +61,9 @@ def render(md: str) -> str:
             out.append("<table border='1' cellpadding='4' style='border-collapse:collapse'>")
             for r, cells in enumerate(rows):
                 tag = "th" if r == 0 else "td"
-                out.append("<tr>" + "".join(f"<{tag}>{_inline(c)}</{tag}>" for c in cells) + "</tr>")
+                # Docs' importer escapes markup inside table cells (literal ** and \#):
+                # plain text only, and "No." instead of a bare "#"
+                out.append("<tr>" + "".join(f"<{tag}>{_cell(c)}</{tag}>" for c in cells) + "</tr>")
             out.append("</table>")
             continue
         elif line.startswith("- "):
