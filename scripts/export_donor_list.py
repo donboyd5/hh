@@ -210,6 +210,10 @@ BOARD_ADD_NOTES = {
         "board add (Don 2026-09-13); Neon acct 37929 mistyped Company; PO Box addr per "
         "Neon 'Mailing Address' note; business: 688 Wilbur Ave (Fort Miller Group)"
     ),
+    # Don wrote "Sorenson"; Neon's household name spells it Sorensen - kept as Neon has it
+    "diane kennedy & jon sorensen": (
+        "board add (Don 2026-09-13); $129 5-yr giving is under the $150 bar, no steward"
+    ),
 }
 
 
@@ -247,6 +251,11 @@ def _tidy(board: pd.DataFrame) -> pd.DataFrame:
     board["address"] = board["address"].map(
         lambda a: re.sub(r"\s+", " ", str(a)).strip().rstrip(",") if pd.notna(a) else a
     )
+    # Neon carries stray whitespace ("Evelyn ", "Ellie  Valentine"): squeeze + strip
+    for col in ("mailing_name", "salutation"):
+        board[col] = board[col].map(
+            lambda v: re.sub(r"\s+", " ", str(v)).strip() or None if pd.notna(v) else v
+        )
     board["city"] = board["city"].map(_clean_city)
     board["state"] = board["state"].map(lambda s: str(s).strip().upper() if pd.notna(s) else s)
     board["zip"] = board["zip"].map(_clean_zip)
@@ -565,7 +574,8 @@ def _finalize(df: pd.DataFrame, fy2026: pd.Series, fy5yr: pd.Series, *, id_start
     df = _tidy(df[df["address"].notna()])  # every row must be mailable
     df = _enrich(df, fy2026, fy5yr)
     df["__key"] = df["mailing_name"].map(_sort_key)
-    df = df.sort_values("__key").drop(columns="__key").reset_index(drop=True)
+    # stable: equal sort keys (two "William Cormier" rows) keep build order run to run
+    df = df.sort_values("__key", kind="stable").drop(columns="__key").reset_index(drop=True)
     df.insert(0, "id", range(id_start, id_start + len(df)))
     return df
 
