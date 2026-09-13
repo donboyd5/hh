@@ -58,6 +58,20 @@ CANDIDATE_COLUMNS = [
     "zip_code", "detail",
 ]
 
+# Hand-verified corrections to defects carried in the source lists (Don, 2026-09-13).
+# The source files stay untouched (the MfS workbook is final, sha-verified); fixes live
+# here so every book consumer gets them. Keyed by book name - Neon household names can
+# be renamed between pulls, so re-check these keys after a fresh Neon pull.
+ADDRESS_CORRECTIONS = {
+    # MfS list carried a Manhattan zip for Sunderland VT (no 05xxx); Sunderland shares
+    # Arlington's post office, USPS zip 05250
+    "Harriet Deardon Welther": {"zip_code": "05250"},
+    # MfS typos / nonstandard city spellings
+    "Linda & Chuck Putney": {"city": "Bennington"},
+    "Dakota Wilbur & Chad Varney": {"city": "Greenwich"},
+    "Cynthia Mangsen": {"city": "North Bennington"},
+}
+
 # streets compared for conflicts after casefold + punctuation/whitespace squeeze
 _STREET_NORM = re.compile(r"[^a-z0-9]+")
 
@@ -274,6 +288,11 @@ def build_address_book(
             lambda s: bool(is_po_box(s)) if pd.notna(s) else False
         ),
     )
+    # hand-verified source-defect fixes win over whatever the best source carried
+    for name, fixes in ADDRESS_CORRECTIONS.items():
+        at = book["name"].eq(name)
+        for col, val in fixes.items():
+            book.loc[at, col] = val
 
     # -- mailing-list context: the letter it would get, Don's notes --------------------
     if not mailing_list.empty:
