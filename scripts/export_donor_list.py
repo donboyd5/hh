@@ -108,6 +108,14 @@ INDIVIDUAL_LIST_MAX = 10
 # the board sheet's own 1..N ids)
 DNC_ID_START = 1000
 
+# Hand steward assignments made outside this pipeline (Don's colleague edited the
+# board tab of a downloaded xlsx, 2026-09-13; Don: "take her changes and play them on
+# top of our updated data"). Kept as a file so they survive every regeneration.
+# Columns: key (neon_hh_id, or "name:<normalized mailing name>" for not-in-Neon rows),
+# mailing_name, steward, source, noted. A non-blank steward here wins over the
+# pipeline's value; rows whose key no longer exists are reported, not applied.
+STEWARD_OVERRIDES = config.layer_dir("external") / "steward-overrides.csv"
+
 # "Ann & Bob Smith" -> ("smith", "ann"): labels sort by surname, then first listed name
 _JUNK = re.compile(r"\b(?:mr|mrs|ms|dr|and|the|family)\b|[.,]", re.I)
 
@@ -157,6 +165,32 @@ def _construct_salutation(name: str) -> str | None:
 
 def _norm(name: str) -> str:
     return re.sub(r"\s+", " ", str(name)).strip().lower()
+
+
+def _row_key(df: pd.DataFrame) -> list[str]:
+    """Stable per-household key across regenerations (the positional `id` is not one):
+    the Neon household id, else the normalized mailing name."""
+    return [
+        str(h) if pd.notna(h) and str(h) else "name:" + _norm(n)
+        for h, n in zip(df["neon_hh_id"], df["mailing_name"])
+    ]
+
+
+def _apply_steward_overrides(df: pd.DataFrame) -> pd.DataFrame:
+    """Overlay STEWARD_OVERRIDES on `steward`; records hit/miss counts in df.attrs."""
+    if not STEWARD_OVERRIDES.exists():
+        return df
+    ov = pd.read_csv(STEWARD_OVERRIDES, dtype=str).fillna("")
+    lookup = {k: v.strip() for k, v in zip(ov["key"], ov["steward"]) if v.strip()}
+    df = df.copy()
+    keys = _row_key(df)
+    hit = pd.Series([k in lookup for k in keys], index=df.index)
+    df.loc[hit, "steward"] = [lookup[k] for k in keys if k in lookup]
+    df.attrs["steward_overrides"] = {
+        "applied": int(hit.sum()),
+        "unmatched": sorted(set(lookup) - set(keys)),
+    }
+    return df
 
 
 def _label_name(name: str) -> str:
@@ -461,7 +495,7 @@ def build() -> pd.DataFrame:
     rows = [r for r in rows if not _excluded(r["mailing_name"])]
 
     n_built = len(rows)
-    board = _finalize(pd.DataFrame(rows), fy2026, fy5yr, id_start=1)
+    board = _apply_steward_overrides(_finalize(pd.DataFrame(rows), fy2026, fy5yr, id_start=1))
     board.attrs["qa"] = {
         "set_aside_deceased_dnc": len(set_aside),
         "band_unmatched": int(band["neon_hh_id"].isna().sum()),
@@ -470,9 +504,13 @@ def build() -> pd.DataFrame:
         "dropped_no_address": n_built - len(board),
     }
     dnc_raw = _dnc_review(neon, dnc_mask, deceased_mask, book, b, salutation)
-    board.attrs["dnc_review"] = _finalize(dnc_raw, fy2026, fy5yr, id_start=DNC_ID_START)
+    board.attrs["dnc_review"] = _apply_steward_overrides(
+        _finalize(dnc_raw, fy2026, fy5yr, id_start=DNC_ID_START)
+    )
     reception_raw = _reception_draft(board, book, b, m, fy5yr, internal_ids)
-    board.attrs["reception_draft"] = _finalize(reception_raw, fy2026, fy5yr, id_start=1)
+    board.attrs["reception_draft"] = _apply_steward_overrides(
+        _finalize(reception_raw, fy2026, fy5yr, id_start=1)
+    )
     return board
 
 
@@ -749,13 +787,24 @@ def main() -> None:
     dnc_review = board.attrs["dnc_review"]
     not_in_neon = board[~board["in_neon"]].reset_index(drop=True)
     reception_draft = board.attrs["reception_draft"]
+    # board sheet only: steward, then surname (Don, 2026-09-13, matching his colleague's
+    # working order); blank stewards last. The ids keep their surname-order numbers so
+    # they still line up with the printer sheet; every other sheet stays surname-sorted.
+    board_view = (
+        board.assign(
+            __st=board["steward"].fillna("").astype(str).str.strip().str.lower().replace("", "~"),
+            __nm=board["mailing_name"].map(_sort_key),
+        )
+        .sort_values(["__st", "__nm"], kind="stable")
+        .drop(columns=["__st", "__nm"])
+    )
     sources = {
-        "printer": board, "board": board, "do_not_contact": dnc_review,
+        "printer": board, "board": board_view, "do_not_contact": dnc_review,
         "not_in_neon": not_in_neon, "reception_draft": reception_draft,
     }
     with pd.ExcelWriter(xlsx, engine="openpyxl") as xw:
         board[PRINTER_COLUMNS].to_excel(xw, sheet_name="printer", index=False)
-        board[BOARD_COLUMNS].to_excel(xw, sheet_name="board", index=False)
+        board_view[BOARD_COLUMNS].to_excel(xw, sheet_name="board", index=False)
         dnc_review[BOARD_COLUMNS].to_excel(xw, sheet_name="do_not_contact", index=False)
         not_in_neon[BOARD_COLUMNS].to_excel(xw, sheet_name="not_in_neon", index=False)
         reception_draft[BOARD_COLUMNS].to_excel(xw, sheet_name="reception_draft", index=False)
@@ -777,6 +826,10 @@ def main() -> None:
             for cell in sheet[1]:
                 cell.font = Font(bold=True)
     md_path.write_text(_md(board))
+    ov = board.attrs.get("steward_overrides")
+    if ov:
+        print(f"steward overrides: {ov['applied']} applied"
+              + (f"; UNMATCHED keys: {ov['unmatched']}" if ov["unmatched"] else ""))
     print(board["category"].value_counts().to_string())
     print(f"\n{len(board)} households -> {xlsx.name}, {md_path.name}")
     print(
