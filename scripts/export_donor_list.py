@@ -133,13 +133,25 @@ def _last_name(name: str) -> str | None:
 def _construct_salutation(name: str) -> str | None:
     """Best-effort salutation when Neon has none on file: first name(s) only, e.g.
     "Ann & Bob Smith" -> "Ann & Bob", "Katherine Kelleher & John Franklin" -> "Katherine
-    & John", "Elizabeth L. Ellard" -> "Elizabeth". A guess, not a lookup - callers flag
-    these for review rather than trusting them outright (Don, 2026-09-11)."""
+    & John", "Elizabeth L. Ellard" -> "Elizabeth", "Mary Ann Spiezio" -> "Mary Ann"
+    (a compound given name survives; a bare initial does not). A guess, not a lookup -
+    callers flag these for review rather than trusting them outright (Don, 2026-09-11)."""
     s = re.sub(r"\s+", " ", str(name)).strip()
     if not s:
         return None
     parts = re.split(r"\s*(?:&|\band\b)\s*", s, flags=re.I)
-    firsts = [p.split()[0] for p in parts if p.split()]
+    firsts = []
+    for p in parts:
+        toks = p.split()
+        if not toks:
+            continue
+        if len(toks) == 1:            # bare mononym part, e.g. "Smith & Assoc"
+            firsts.append(toks[0])
+            continue
+        given = toks[:-1]             # everything but the surname token
+        while len(given) > 1 and re.fullmatch(r"[A-Za-z]\.?", given[-1]):
+            given = given[:-1]        # drop trailing middle initials ("Elizabeth L.")
+        firsts.append(" ".join(given))
     return " & ".join(firsts) if firsts else s
 
 
@@ -175,7 +187,11 @@ MFS_2ND_ADDRESS = {
 #     md - worth having Judy mark him deceased in Neon).
 #   - Kenneth Strickler (2344): Don believes he has moved. His MfS row folds into this
 #     same Neon household, so excluding both name forms covers either path.
-MAILING_EXCLUDE = {"joan bohrer & stephen schatz", "kenneth strickler", "ken strickler"}
+#   - Lucas Sconzo (3945, $310 5-yr donor): removed at Don's direction (2026-09-13,
+#     same evening). Larry Sconzo (132) is a separate household and stays.
+MAILING_EXCLUDE = {
+    "joan bohrer & stephen schatz", "kenneth strickler", "ken strickler", "lucas sconzo",
+}
 
 
 def _excluded(name: str) -> bool:
@@ -190,6 +206,10 @@ def _excluded(name: str) -> bool:
 BOARD_ADD_NOTES = {
     "carol brownell": "board add (Don 2026-09-13); failed every screen; Neon spelling of first name confirmed",
     "elsa jean brancaleone": "board add (Don 2026-09-13); personal friend; Don expects $500+ gift",
+    "mary ann spiezio": (
+        "board add (Don 2026-09-13); Neon acct 37929 mistyped Company; PO Box addr per "
+        "Neon 'Mailing Address' note; business: 688 Wilbur Ave (Fort Miller Group)"
+    ),
 }
 
 
@@ -449,6 +469,11 @@ def build() -> pd.DataFrame:
 
 RECEPTION_TOP_N = 30  # Don, 2026-09-11: 34 FST sponsors + the 30 largest 5yr donors
 
+# Reception invites among the board adds - NOT every board add comes to the reception
+# (Don, 2026-09-13: Mary Ann Spiezio yes; Carol Brownell and Elsa Brancaleone no).
+# Keep this hand list deliberate as board adds grow.
+RECEPTION_BOARD_ADDS = {"mary ann spiezio"}
+
 
 def _reception_draft(
     board: pd.DataFrame, book: pd.DataFrame, b: pd.DataFrame, m: pd.DataFrame,
@@ -491,6 +516,26 @@ def _reception_draft(
             "in_neon": True, "do_not_contact": bool(bk["do_not_contact"]),
             "deceased": bool(bk["deceased"]),
         })
+    # the hand-picked board adds join the reception list too (RECEPTION_BOARD_ADDS is
+    # deliberate, not automatic - see its comment)
+    for key in sorted(RECEPTION_BOARD_ADDS):
+        for r in book[book["name"].map(lambda n: _norm(n) == key)].itertuples(index=False):
+            if r.address is None or pd.isna(r.address):
+                continue  # a reception row must carry an address
+            hh_id = str(r.neon_hh_id) if pd.notna(r.neon_hh_id) else None
+            rows.append({
+                "mailing_name": _label_name(r.name), "salutation": salutation.get(hh_id),
+                "address": r.address,
+                "city": r.city, "state": r.state_province, "zip": r.zip_code,
+                "category": "board add - reception invite",
+                "email": r.email if pd.notna(r.email) else r.research_email,
+                "phone": r.phone if pd.notna(r.phone) else r.research_phone,
+                "neon_hh_id": hh_id, "steward": steward_map.get(hh_id),
+                "notes": "reception invite per Don (2026-09-13)",
+                "in_neon": bool(r.in_neon),
+                "do_not_contact": bool(r.do_not_contact) if pd.notna(r.do_not_contact) else None,
+                "deceased": bool(r.deceased),
+            })
     donors = pd.DataFrame(rows, columns=BOARD_COLUMNS[1:])
     return pd.concat([fst, donors], ignore_index=True)
 
@@ -666,7 +711,7 @@ def _md(board: pd.DataFrame) -> str:
         "",
         "*Removed by hand (Don, 2026-09-13): Joan Duff-Bohrer (Neon household \"Joan Bohrer",
         "& Stephen Schatz\") at Don's direction - her partner Stephen Schatz is deceased;",
-        "Kenneth Strickler - Don believes he has moved.*",
+        "Kenneth Strickler - Don believes he has moved; Lucas Sconzo.*",
         "",
     ]
     # individuals, listed per category below the table - only for categories small
