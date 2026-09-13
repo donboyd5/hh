@@ -72,12 +72,24 @@ ADDRESS_CORRECTIONS = {
     "Cynthia Mangsen": {"city": "North Bennington"},
 }
 
-# Board-nominated adds whose address Don supplied by hand (2026-09-13) - fills a row
-# that has no source address at all (unlike ADDRESS_CORRECTIONS, which fixes a defect
-# in a source that did carry one). Keyed by book name; re-check after a fresh Neon pull.
+# Board-nominated adds whose address is supplied by hand (2026-09-13) - fills or
+# overrides what the sources carried (unlike ADDRESS_CORRECTIONS, which only fixes a
+# defect in a source that did carry an address). Value = (street, city, state, zip,
+# source-label). Keyed by book name; re-check after a fresh Neon pull.
 BOARD_ADD_ADDRESSES = {
-    "Elsa Jean Brancaleone": ("74 Randolph Road", "White Plains", "NY", "10607"),
+    # Don supplied the address outright; no source had one
+    "Elsa Jean Brancaleone": ("74 Randolph Road", "White Plains", "NY", "10607", "board-add"),
+    # Her Neon account's note titled "Mailing Address" (noted 2026-05-01) says PO Box 98
+    # Schuylerville; the account's street fields carry the Fort Miller Group business
+    # address instead. The note is the deliberate mail-me-here signal - it wins.
+    "Mary Ann Spiezio": ("PO Box 98", "Schuylerville", "NY", "12871", "neon-note"),
 }
+
+# Board-nominated Neon accounts the book's individual universe would otherwise miss
+# (2026-09-13: Mary Ann Spiezio's account is mistyped Company, so the individual-side
+# contact build never reached it). These names vouch for a Neon household exactly like
+# an add-on list match does. Judy should retype the account Individual.
+BOARD_ADD_VOUCHERS = {"Mary Ann Spiezio"}
 
 # streets compared for conflicts after casefold + punctuation/whitespace squeeze
 _STREET_NORM = re.compile(r"[^a-z0-9]+")
@@ -137,6 +149,12 @@ def build_address_book(
         )
         for key, frame in received.items()
     }
+    # board-add vouchers: Neon accounts (e.g. mistyped Company) a board nomination
+    # vouches for, matched against the full households pool like any other list
+    voucher_match = (
+        match_households(pd.Series(sorted(BOARD_ADD_VOUCHERS), name="name"), households)
+        if BOARD_ADD_VOUCHERS else pd.DataFrame(columns=["id"])
+    )
 
     # -- Neon universe: individual households, plus company-only rollups an add-on list
     #    matched (list-vouched people — kept and flagged, not silently dropped) ---------
@@ -145,6 +163,7 @@ def build_address_book(
     for matched in list_matches.values():
         if matched is not None:
             matched_any |= set(matched["id"].dropna().astype(str))
+    matched_any |= set(voucher_match["id"].dropna().astype(str))
     extra = pick_contact(accounts, donations).rename(columns={"id": "neon_hh_id"})
     extra = extra[
         extra["neon_hh_id"].astype(str).isin(matched_any)
@@ -300,13 +319,13 @@ def build_address_book(
         at = book["name"].eq(name)
         for col, val in fixes.items():
             book.loc[at, col] = val
-    # board-add addresses supply what no source carried at all
-    for name, (street, city, state, zip_) in BOARD_ADD_ADDRESSES.items():
+    # hand-supplied board-add addresses fill or override the sources' pick
+    for name, (street, city, state, zip_, source) in BOARD_ADD_ADDRESSES.items():
         at = book["name"].eq(name)
         book.loc[at, ["address", "city", "state_province", "zip_code"]] = [
             street, city, state, zip_
         ]
-        book.loc[at, "address_source"] = "board-add"
+        book.loc[at, "address_source"] = source
 
     # -- mailing-list context: the letter it would get, Don's notes --------------------
     if not mailing_list.empty:
