@@ -39,8 +39,9 @@ def _cell(v, header: str) -> str:
         return ""
     if isinstance(v, bool):
         return "True" if v else "False"
-    if isinstance(v, float) and v.is_integer():
-        return str(int(v))
+    if isinstance(v, float):
+        # dollar totals: no binary-float noise (4887.940000000001) in the Sheet
+        return str(int(v)) if v.is_integer() else f"{round(v, 2):.2f}".rstrip("0").rstrip(".")
     if header == "zip":
         return f'="{v}"'
     return str(v)

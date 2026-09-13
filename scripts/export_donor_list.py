@@ -251,6 +251,11 @@ def _tidy(board: pd.DataFrame) -> pd.DataFrame:
     board["address"] = board["address"].map(
         lambda a: re.sub(r"\s+", " ", str(a)).strip().rstrip(",") if pd.notna(a) else a
     )
+    # Neon carries stray whitespace ("Evelyn ", "Ellie  Valentine"): squeeze + strip
+    for col in ("mailing_name", "salutation"):
+        board[col] = board[col].map(
+            lambda v: re.sub(r"\s+", " ", str(v)).strip() or None if pd.notna(v) else v
+        )
     board["city"] = board["city"].map(_clean_city)
     board["state"] = board["state"].map(lambda s: str(s).strip().upper() if pd.notna(s) else s)
     board["zip"] = board["zip"].map(_clean_zip)
