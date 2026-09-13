@@ -160,3 +160,55 @@ is the index, not the implementation. Started 2026-08-31; dates mark when a less
   module, 2026-08-31).
 - **External workbooks get provenance entries** — checksum, size, mtime, and loading
   commit, one entry per file version (`external/provenance.py`).
+
+## Fall-2026 mailing-list deliverables (2026-09-10 → 09-13)
+
+- **`mailing_list.parquet` is a prospect universe, not "everyone in Neon"** — its id
+  union only holds households meeting some criterion (5-yr donor, donor-3 workbook,
+  new accounts, silent keep-list, appeal responder/giver, $500 engaged spend). 12 of
+  17 MfS donors already matched to Neon households had no row in it at all, so no
+  loop over it can reach them (found 2026-09-11). "Include everyone" requests must
+  source from the address book instead — category 7 and the reception top-30 in
+  `scripts/export_donor_list.py` do exactly that, and re-apply the
+  deceased/do-not-contact set-aside by hand since they bypass `apply_exclusions`.
+- **Internal house accounts rank in top-donor lists unless excluded** — the cash-drawer
+  rollup (36805, "Cash and Credit Card Miscellaneous Transactions") has no address and
+  once appeared in a top-30 by dollar total; `INTERNAL_ACCOUNT_IDS` must be mirrored
+  into any ranking that doesn't go through `build_mailing_list`
+  (`_reception_draft` in `scripts/export_donor_list.py`).
+- **`do_not_contact` hides real donors** — 16 would-qualify households surfaced when
+  DNC records were classified with the same rules as everyone else (incl. a ~$15k/yr
+  major donor). Set-asides deserve a review sheet, not a silent drop
+  (`_dnc_review` in `scripts/export_donor_list.py`).
+- **Assessment-roll matching needs street agreement, not just a name hit** — the roll
+  is ~39k parcels across Washington + Rensselaer counties, and common names hit
+  unrelated parcels (a "Karen Anderson" name hit on a different street). Name +
+  normalized-street prefix both must agree (`_roll_corroborates` in
+  `scripts/export_mfs_attendee_match.py`). Corollaries: PO-box households can never be
+  roll-corroborated, and the roll does not cover Saratoga or Bennington-VT counties.
+- **The automated list matcher misses nickname/partial-name variants** — "Lisa Chang"
+  vs Neon's "William Buzbee & Lisa Chang", "Marti & Ray Ellermann" vs "Marti &
+  Raymond Ellermann" both required a manual surname cross-check to catch
+  (2026-09-11; `MANUAL_NEON_MATCH` in `scripts/export_mfs_attendee_match.py`).
+- **Salutation resolves household-first** (`Household Salutation` fills from
+  `Salutation`), and about half the list has neither — constructed first-name
+  salutations are filled in but flagged (bold, yellow) for review
+  (`_salutation_map` / `_construct_salutation` in `scripts/export_donor_list.py`).
+- **Source-list address defects are corrected in code, never in the source** — e.g.
+  Sunderland VT has no post office of its own (shares Arlington's USPS zip 05250, not
+  the Manhattan 10025 the MfS list carried), plus "Bennigton"/"Grewnwich" typo towns.
+  Corrections live in `ADDRESS_CORRECTIONS` (`external/address_book.py`) so every
+  consumer gets them while the sha-verified source files stay pristine; name-keyed,
+  so re-check after a Neon pull.
+- **Record web-research *non*-findings too** — a yaml entry saying "searched, here's
+  why nothing was found" (wrong-region hits ruled out, no anchor town) prevents
+  re-researching the same dead end later (`data/30_external/contact-research.yaml`,
+  `mfs-attendee-research.yaml`).
+- **Drive deliverables**: CSV→Sheets import strips leading ZIP zeros (wrap zips as
+  `="05773"` formulas) and carries no cell formatting; HTML→Google-Docs import breaks
+  on `rowspan` (repeat blank cells instead). A ~550-row CSV is too big to hand-copy
+  through the session's own context — delegate read-then-upload to a subagent.
+- **Verify a PR's merge state before pushing to its branch again** — a commit pushed
+  minutes *after* GitHub merged the PR sits orphaned on the branch while everything
+  downstream behaves as if it shipped (reception_draft, 2026-09-11; caught two days
+  later). `gh pr view <n> --json state,mergedAt` before every follow-up push.
