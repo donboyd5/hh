@@ -42,3 +42,19 @@ statements conflict, the rule that is more specific to Hubbard Hall wins.
   the Methodology appendix carries the detail: raw data, cleaning, definitions, geography, and
   methods. When a question is "how is this defined?" or "where does this come from?", the
   answer belongs in the appendix.
+
+## Google Drive deliverables (Docs and Sheets)
+
+- **Never overwrite or replace a Google Doc that people may have commented on.** Colleagues
+  leave comments in the Drive copies of deliverables (e.g. "Final mailing list - draft 1");
+  those comments are decisions and must never be lost. Publish each new version as a
+  **new file under a new name** carrying a version number and date (e.g.
+  "Final mailing list - draft 1 - v2 2026-09-13"), and leave every earlier Doc exactly as
+  it is - do not trash it, do not rewrite its contents, do not "update in place".
+- Before touching any Drive file, read it with comments included; if it has comment
+  threads, treat it as read-only and tell Don what the comments say.
+- Generated Sheets (the CSV mirrors of the xlsx) are disposable and are replaced
+  create-then-trash, one at a time; the Doc rule above does not apply to them unless a
+  Sheet has comments, in which case the same never-overwrite rule applies.
+- Only one Drive upload in flight at a time (two concurrent uploaders to the same folder
+  once produced duplicate sheets under identical titles).
