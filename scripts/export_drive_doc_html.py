@@ -29,7 +29,7 @@ def _inline(s: str) -> str:
 
 
 def _cell(s: str) -> str:
-    s = s.replace("**", "").strip()
+    s = s.replace("**", "").replace("<$", "under $").strip()  # importer renders "<" as "\<" in cells
     return "No." if s == "#" else html.escape(s, quote=False)
 
 
