@@ -165,7 +165,7 @@ def main() -> None:
     with pd.ExcelWriter(xlsx, engine="openpyxl") as xw:
         df.to_excel(xw, sheet_name="mfs_attendees", index=False)
         sheet = xw.sheets["mfs_attendees"]
-        sheet.freeze_panes = "A2"
+        sheet.freeze_panes = "B2"  # house style: header row + first column frozen
         widths = {"name": 26, "address": 24, "city": 14, "notes": 60}
         for i, col in enumerate(df.columns, start=1):
             sheet.column_dimensions[get_column_letter(i)].width = widths.get(col, 12)

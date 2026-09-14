@@ -58,3 +58,20 @@ statements conflict, the rule that is more specific to Hubbard Hall wins.
   Sheet has comments, in which case the same never-overwrite rule applies.
 - Only one Drive upload in flight at a time (two concurrent uploaders to the same folder
   once produced duplicate sheets under identical titles).
+
+## Spreadsheet deliverables (xlsx and Drive Sheets)
+
+House style, set by Don by hand on the Drive board sheet (2026-09-13). Every sheet we
+generate for people (donor lists, address book, attendee match, ...) gets it in the xlsx:
+
+- **Bold header row.**
+- **Freeze panes at B2** - row 1 (headers) and column A (the id / first column) stay
+  visible while scrolling. (`ws.freeze_panes = "B2"` in openpyxl.)
+- **Money columns financial-formatted, no decimals**: `#,##0` (comma thousands, no `$`).
+- **Names readable without widening**: mailing name, salutation and category columns
+  wide enough to show most of their text (currently 32 / 22 / 32 characters); address
+  and notes wide too.
+- A CSV->Sheets upload carries NONE of this (no cell formatting in CSV). When a Drive
+  Sheet has been hand-formatted, say so before replacing it, and re-apply the formatting
+  (or upload the xlsx itself, which Sheets converts with formatting intact) rather than
+  silently dropping it.

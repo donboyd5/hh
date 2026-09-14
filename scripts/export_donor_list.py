@@ -86,15 +86,17 @@ BOARD_COLUMNS = PRINTER_COLUMNS + [
     "in_neon", "do_not_contact", "deceased",
 ]
 
-# xlsx column widths (Don, 2026-09-11: "see the names, and most of the address" without
-# having to widen every column by hand) and the plain-number format for the donation
-# columns ("comma formatted, no decimals, no dollar sign")
+# Deliverable-sheet formatting, the house style Don set by hand on the Drive board
+# sheet (2026-09-13; see meta-docs/RULES.md "Spreadsheet deliverables"): bold header,
+# header row + first column frozen, money as #,##0, and mailing name / salutation /
+# category wide enough to read without widening by hand.
 COLUMN_WIDTHS = {
-    "mailing_name": 28, "salutation": 18, "address": 26, "city": 14, "category": 26,
+    "mailing_name": 32, "salutation": 22, "address": 26, "city": 14, "category": 32,
     "email": 24, "notes": 40,
 }
 DOLLAR_COLUMNS = {"donations_2025_26", "donations_5yr"}
 DOLLAR_FORMAT = "#,##0"
+FREEZE_PANES = "B2"  # row 1 and column A stay visible while scrolling
 
 # constructed (not from Neon) salutations get flagged for review - Don, 2026-09-11
 REVIEW_FILL = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
@@ -819,7 +821,7 @@ def main() -> None:
         not_in_neon[BOARD_COLUMNS].to_excel(xw, sheet_name="not_in_neon", index=False)
         reception_draft[BOARD_COLUMNS].to_excel(xw, sheet_name="reception_draft", index=False)
         for name, sheet in xw.sheets.items():
-            sheet.freeze_panes = "A2"
+            sheet.freeze_panes = FREEZE_PANES
             columns = PRINTER_COLUMNS if name == "printer" else BOARD_COLUMNS
             for i, col in enumerate(columns, start=1):
                 letter = get_column_letter(i)
