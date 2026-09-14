@@ -82,7 +82,7 @@ PRINTER_COLUMNS = ["id", "mailing_name", "salutation", "address", "city", "state
 BOARD_COLUMNS = PRINTER_COLUMNS + [
     "category", "email", "phone",
     "neon_hh_id", "last_name", "donations_2025_26", "donations_5yr",
-    "steward", "notes",
+    "steward", "notes", "jp_notes",
     "in_neon", "do_not_contact", "deceased",
 ]
 
@@ -92,7 +92,7 @@ BOARD_COLUMNS = PRINTER_COLUMNS + [
 # category wide enough to read without widening by hand.
 COLUMN_WIDTHS = {
     "mailing_name": 32, "salutation": 22, "address": 26, "city": 14, "category": 32,
-    "email": 24, "notes": 40,
+    "email": 24, "notes": 40, "jp_notes": 40,
 }
 DOLLAR_COLUMNS = {"donations_2025_26", "donations_5yr"}
 DOLLAR_FORMAT = "#,##0"
@@ -117,6 +117,30 @@ DNC_ID_START = 1000
 # mailing_name, steward, source, noted. A non-blank steward here wins over the
 # pipeline's value; rows whose key no longer exists are reported, not applied.
 STEWARD_OVERRIDES = config.layer_dir("external") / "steward-overrides.csv"
+
+# Judy Pate's row comments (her "JP Notes" columns, received 2026-09-13), consolidated
+# into one jp_notes column on every sheet but printer (Don, 2026-09-14). Same key
+# scheme as the steward overrides; a household commented on several sheets gets the
+# notes joined with " | ". Her three general remarks live in jp-notes-general.csv and
+# are quoted in the md.
+JP_NOTES = config.layer_dir("external") / "jp-notes.csv"
+JP_NOTES_GENERAL = config.layer_dir("external") / "jp-notes-general.csv"
+
+# do_not_contact households Don ruled mailable anyway (2026-09-14 email), keyed by
+# Neon household id: they go through the normal screens like everyone else and carry
+# the reason in notes. The book's do_not_contact flag still shows True on their rows.
+DNC_MAIL_ANYWAY = {
+    "70": "DNC overridden (Don 2026-09-14): Neubohns are major consistent donors; ask Andrew",
+    "3964": "DNC overridden (Don 2026-09-14): Nolan/MacKrell $500 5-yr; Sue proposed adding Mary",
+    "1672": "DNC overridden (Don 2026-09-14): Merrill's DNC = anonymous gifts, OK to thank/ask",
+    "40010": "DNC overridden (Don 2026-09-14): Brillon DNC is for the business; home address OK",
+    "288": "DNC overridden (Don 2026-09-14): Throop DNC is for Mitch's business; contact Carol",
+}
+
+# extra notes Don asked to carry on specific rows (keyed by Neon household id)
+HAND_NOTES = {
+    "3809": "moved to Cambridge NY per Judy; SC address kept until new one obtained via Alyson (Don 2026-09-14)",
+}
 
 # "Ann & Bob Smith" -> ("smith", "ann"): labels sort by surname, then first listed name
 _JUNK = re.compile(r"\b(?:mr|mrs|ms|dr|and|the|family)\b|[.,]", re.I)
@@ -178,6 +202,23 @@ def _row_key(df: pd.DataFrame) -> list[str]:
     ]
 
 
+def _apply_jp_notes(df: pd.DataFrame) -> pd.DataFrame:
+    """Fill jp_notes from JP_NOTES (joined per household) and append HAND_NOTES to notes."""
+    df = df.copy()
+    keys = _row_key(df)
+    if JP_NOTES.exists():
+        jp = pd.read_csv(JP_NOTES, dtype=str).fillna("")
+        joined = jp.groupby("key")["note"].apply(lambda v: " | ".join(dict.fromkeys(x.strip() for x in v if x.strip())))
+        df["jp_notes"] = [joined.get(k) for k in keys]
+    else:
+        df["jp_notes"] = None
+    for i, k in zip(df.index, keys):
+        if k in HAND_NOTES:
+            cur = df.at[i, "notes"]
+            df.at[i, "notes"] = (f"{cur}; " if isinstance(cur, str) and cur else "") + HAND_NOTES[k]
+    return df
+
+
 def _apply_steward_overrides(df: pd.DataFrame) -> pd.DataFrame:
     """Overlay STEWARD_OVERRIDES on `steward`; records hit/miss counts in df.attrs."""
     if not STEWARD_OVERRIDES.exists():
@@ -225,8 +266,11 @@ MFS_2ND_ADDRESS = {
 #     same Neon household, so excluding both name forms covers either path.
 #   - Lucas Sconzo (3945, $310 5-yr donor): removed at Don's direction (2026-09-13,
 #     same evening). Larry Sconzo (132) is a separate household and stays.
+#   - Christa Berthiaume (69) moved to VA and Rich & Dari Norman (FST, not in Neon)
+#     moved to NJ, per Judy; Don 2026-09-14: off the list (Norman also off reception).
 MAILING_EXCLUDE = {
     "joan bohrer & stephen schatz", "kenneth strickler", "ken strickler", "lucas sconzo",
+    "christa berthiaume", "rich & dari norman",
 }
 
 
@@ -346,7 +390,8 @@ def build() -> pd.DataFrame:
     # mailing_list.parquet's prospect universe, so it covers every row including the
     # cat-7/do-not-contact edge cases that universe leaves out)
     accounts = clean_accounts()
-    gfy = gifts_by_fy(clean_donations(accounts=accounts), GIVING_FYS)
+    donations = clean_donations(accounts=accounts)
+    gfy = gifts_by_fy(donations, GIVING_FYS)
     gfy = gfy.assign(id=gfy["id"].astype(str)).set_index("id")
     fy2026 = gfy["don_fy2026"]
     fy5yr = gfy[DON_FY_COLUMNS].sum(axis=1)
@@ -360,7 +405,10 @@ def build() -> pd.DataFrame:
     # -- Neon side: categories in priority order over living, contactable rows -------
     neon = m[m["neon_hh_id"].notna()].copy()
     deceased_mask = neon["deceased"].fillna(False).astype(bool)
-    dnc_mask = neon["do_not_contact"].fillna(False).astype(bool)
+    dnc_mask = (
+        neon["do_not_contact"].fillna(False).astype(bool)
+        & ~neon["neon_hh_id"].astype(str).isin(DNC_MAIL_ANYWAY)
+    )
     set_aside = neon[deceased_mask | dnc_mask]
     alive = neon[~(deceased_mask | dnc_mask)].copy()
     cat, silent = _classify(alive)
@@ -406,7 +454,7 @@ def build() -> pd.DataFrame:
         rows.append(_neon_row(r, b, 6))
     for hh_id in cat7_ids:
         bk = b.loc[hh_id]
-        if bool(bk["do_not_contact"]) or bool(bk["deceased"]):
+        if bool(bk["deceased"]) or (bool(bk["do_not_contact"]) and hh_id not in DNC_MAIL_ANYWAY):
             continue
         note = (
             "on the MfS donor list; no other qualifying category"
@@ -416,6 +464,8 @@ def build() -> pd.DataFrame:
         second_addr = MFS_2ND_ADDRESS.get(_norm(bk["name"]))
         if second_addr:
             note = f"2nd address: {second_addr}; {note}"
+        if hh_id in DNC_MAIL_ANYWAY:
+            note = f"{note}; {DNC_MAIL_ANYWAY[hh_id]}"
         rows.append({
             "mailing_name": _label_name(bk["name"]), "salutation": salutation.get(hh_id),
             "address": bk["address"],
@@ -497,7 +547,7 @@ def build() -> pd.DataFrame:
     rows = [r for r in rows if not _excluded(r["mailing_name"])]
 
     n_built = len(rows)
-    board = _apply_steward_overrides(_finalize(pd.DataFrame(rows), fy2026, fy5yr, id_start=1))
+    board = _apply_jp_notes(_apply_steward_overrides(_finalize(pd.DataFrame(rows), fy2026, fy5yr, id_start=1)))
     board.attrs["qa"] = {
         "set_aside_deceased_dnc": len(set_aside),
         "band_unmatched": int(band["neon_hh_id"].isna().sum()),
@@ -506,17 +556,38 @@ def build() -> pd.DataFrame:
         "dropped_no_address": n_built - len(board),
     }
     dnc_raw = _dnc_review(neon, dnc_mask, deceased_mask, book, b, salutation)
-    board.attrs["dnc_review"] = _apply_steward_overrides(
+    board.attrs["dnc_review"] = _apply_jp_notes(_apply_steward_overrides(
         _finalize(dnc_raw, fy2026, fy5yr, id_start=DNC_ID_START)
+    ))
+    ed_ids = set(
+        donations.loc[
+            donations["campaign"].eq(ED_FUND_CAMPAIGN) | donations["fund"].eq(ED_FUND_FUND), "id"
+        ].dropna().astype(str)
     )
-    reception_raw = _reception_draft(board, book, b, m, fy5yr, internal_ids)
-    board.attrs["reception_draft"] = _apply_steward_overrides(
+    reception_raw = _reception_draft(board, book, b, m, fy5yr, internal_ids, ed_ids)
+    board.attrs["reception_draft"] = _apply_jp_notes(_apply_steward_overrides(
         _finalize(reception_raw, fy2026, fy5yr, id_start=1)
-    )
+    ))
     return board
 
 
-RECEPTION_TOP_N = 30  # Don, 2026-09-11: 34 FST sponsors + the 30 largest 5yr donors
+RECEPTION_TOP_N = 50  # Don, 2026-09-14 (was 30): FST sponsors + the 50 largest 5yr donors
+
+# Households dropped from the reception list by hand (Don, 2026-09-14 email), keyed by
+# Neon household id. They still occupy their rank - the top-N is computed first, then
+# these come off - so the cutoff is the one Don quoted ($1,100 at rank 50).
+RECEPTION_EXCLUDE = {
+    "2457": "Dotty Ashton - DNC; keep off appeal and drop from reception",
+    "4356": "Don Katz - DNC, minimal local connection; drop from reception, ask Andrew",
+    "53": "Don & Tracey Boyd - unable to attend",
+    "7": "George Scurria - removed from the list 9/10",
+}
+
+# Executive Director Fund (David Snider's salary, 2013-17): Neon campaign / fund names.
+# Living donors to it who aren't already invited join the reception (Judy's suggestion,
+# Don 2026-09-14: "if we think we will have the space, we should do it").
+ED_FUND_CAMPAIGN = "Executive Director Fund"
+ED_FUND_FUND = "Director's Salary Fund"
 
 # Reception invites among the board adds - NOT every board add comes to the reception
 # (Don, 2026-09-13: Mary Ann Spiezio yes; Carol Brownell and Elsa Brancaleone no).
@@ -526,7 +597,7 @@ RECEPTION_BOARD_ADDS = {"mary ann spiezio"}
 
 def _reception_draft(
     board: pd.DataFrame, book: pd.DataFrame, b: pd.DataFrame, m: pd.DataFrame,
-    fy5yr: pd.Series, internal_ids: set[str],
+    fy5yr: pd.Series, internal_ids: set[str], ed_ids: set[str],
 ) -> pd.DataFrame:
     """FST sponsors + HH's largest living 5-year donors, for reception planning.
 
@@ -546,6 +617,7 @@ def _reception_draft(
     )
     ranked = fy5yr[fy5yr.index.isin(living_ids)].sort_values(ascending=False)
     top = ranked.head(RECEPTION_TOP_N)
+    top = top[~top.index.isin(RECEPTION_EXCLUDE)]  # hand drops keep their rank
 
     steward_map = (
         m.assign(_id=m["neon_hh_id"].astype(str)).drop_duplicates("_id")
@@ -562,6 +634,20 @@ def _reception_draft(
             "category": f"top {RECEPTION_TOP_N} 5yr donor", "email": bk["email"],
             "phone": bk["phone"], "neon_hh_id": hh_id, "steward": steward_map.get(hh_id),
             "notes": f"5yr total rank #{rank} of Neon donors",
+            "in_neon": True, "do_not_contact": bool(bk["do_not_contact"]),
+            "deceased": bool(bk["deceased"]),
+        })
+    # Executive Director Fund donors not otherwise invited (see ED_FUND_CAMPAIGN)
+    invited = set(top.index) | set(RECEPTION_EXCLUDE)
+    for hh_id in sorted(ed_ids & living_ids - invited, key=lambda h: -fy5yr.get(h, 0)):
+        bk = b.loc[hh_id]
+        rows.append({
+            "mailing_name": _label_name(bk["name"]), "salutation": salutation.get(hh_id),
+            "address": bk["address"],
+            "city": bk["city"], "state": bk["state_province"], "zip": bk["zip_code"],
+            "category": "ED fund donor 2013-17", "email": bk["email"],
+            "phone": bk["phone"], "neon_hh_id": hh_id, "steward": steward_map.get(hh_id),
+            "notes": "gave to the Executive Director Fund (David Snider's salary)",
             "in_neon": True, "do_not_contact": bool(bk["do_not_contact"]),
             "deceased": bool(bk["deceased"]),
         })
@@ -628,7 +714,7 @@ def _dnc_review(
     deceased): everyone who WOULD have qualified for a category, for Don to examine
     before deciding whether any should actually be mailed (Don, 2026-09-11: "I don't
     think we want to [exclude every do-not-contact record] without examination")."""
-    dnc_pop = neon[dnc_mask & ~deceased_mask].copy()
+    dnc_pop = neon[dnc_mask & ~deceased_mask].copy()  # dnc_mask already drops DNC_MAIL_ANYWAY
     dnc_pop = dnc_pop[dnc_pop["neon_hh_id"].astype(str).isin(set(b.index.astype(str)))]
     dnc_cat, dnc_silent = _classify(dnc_pop)
     rows = []
@@ -650,7 +736,7 @@ def _dnc_review(
         dnc_pop.loc[dnc_cat[1] | dnc_cat[2] | dnc_cat[3] | dnc_cat[4] | dnc_cat[5] | dnc_silent, "neon_hh_id"]
         .astype(str)
     )
-    for hh_id in sorted((mfs_neon_ids & dnc_book_ids) - captured):
+    for hh_id in sorted((mfs_neon_ids & dnc_book_ids) - captured - set(DNC_MAIL_ANYWAY)):
         bk = b.loc[hh_id]
         rows.append({
             "mailing_name": _label_name(bk["name"]), "salutation": salutation.get(hh_id),
@@ -673,6 +759,8 @@ def _neon_row(r, book_indexed: pd.DataFrame, k: int, extra_note: str | None = No
         notes.append(str(bk["web_note"])[:80])
     if extra_note:
         notes.append(extra_note)
+    if str(r.neon_hh_id) in DNC_MAIL_ANYWAY:
+        notes.append(DNC_MAIL_ANYWAY[str(r.neon_hh_id)])
     return {
         "mailing_name": _label_name(r.household_name), "salutation": r.salutation,
         "address": bk["address"], "city": bk["city"], "state": bk["state_province"],
@@ -771,7 +859,24 @@ def _md(board: pd.DataFrame) -> str:
         "",
         "*Removed by hand (Don, 2026-09-13): Joan Duff-Bohrer (Neon household \"Joan Bohrer",
         "& Stephen Schatz\") at Don's direction - her partner Stephen Schatz is deceased;",
-        "Kenneth Strickler - Don believes he has moved; Lucas Sconzo.*",
+        "Kenneth Strickler - Don believes he has moved; Lucas Sconzo; and, per Judy's",
+        "notes (2026-09-14), Christa Berthiaume (moved to VA) and Rich & Dari Norman",
+        "(moved to NJ). Do-not-contact overridden, so back on the list (Don, 2026-09-14):",
+        "Naneen & Axel Neubohn, James Nolan & Mary MacKrell, Bruce Merrill, Sally Brillon,",
+        "Carol & Mitch Throop - reasons in the board sheet's notes.*",
+        "",
+        f"*Reception draft: FST sponsors plus the top {RECEPTION_TOP_N} living 5-year donors",
+        "(was 30), less Dotty Ashton, Don Katz and Don & Tracey Boyd, plus Executive",
+        "Director Fund donors (2013-17) not otherwise invited and the hand-picked board",
+        "adds. Judy's row comments are consolidated in the jp_notes column of every sheet",
+        "but printer; her general remarks: "
+        + "; ".join(
+            f'"{n}"' for n in (
+                pd.read_csv(JP_NOTES_GENERAL, dtype=str)["note"].tolist()
+                if JP_NOTES_GENERAL.exists() else []
+            )
+        )
+        + "*",
         "",
     ]
     # individuals, listed per category below the table - only for categories small
