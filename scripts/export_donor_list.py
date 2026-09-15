@@ -620,10 +620,12 @@ ED_FUND_FUND = "Director's Salary Fund"
 # Reception history, so the reversals read in order: board members were added
 # regardless of giving (2026-09-15 morning, Judy's remark), then switched to being
 # invited alone without spouses ("we're going to put board members to work"), and
-# are now OFF the reception list entirely (2026-09-15 afternoon, Don) - if they are
-# working the event they do not need an invitation. Every household here is
-# excluded from the reception, including the six who would otherwise qualify on
-# giving alone (Judy Pate, Alix Jones, Surowka, Andrew Pate, Sue Sanderson, Macura).
+# are now off the reception SHEET entirely (2026-09-15 afternoon, Don). They still
+# ATTEND - "board members will go to the reception they just won't get invites" -
+# so the sheet is an invitation list, not an attendance list, and any headcount
+# taken from it must add the board back. Every household here is excluded from the
+# sheet, including the six who would otherwise qualify on giving alone (Judy Pate,
+# Alix Jones, Surowka, Andrew Pate, Sue Sanderson, Macura).
 # Their APPEAL-list rows are untouched - they still get the letter, under the
 # household name. Kept as a table rather than folded into RECEPTION_EXCLUDE so the
 # roster and the reason stay legible if the board changes or the ruling flips again.
@@ -922,11 +924,14 @@ def _md(board: pd.DataFrame) -> str:
         "Naneen & Axel Neubohn, James Nolan & Mary MacKrell, Bruce Merrill, Sally Brillon,",
         "Carol & Mitch Throop - reasons in the board sheet's notes.*",
         "",
-        f"*Reception draft: FST sponsors plus the top {RECEPTION_TOP_N} living 5-year donors",
-        "(was 30), less Dotty Ashton, Don Katz and Don & Tracey Boyd, plus Executive",
-        "Director Fund donors (2013-17) not otherwise invited, HH board members regardless",
-        "of giving - invited alone, without spouses, since they are working the event",
-        "(Don, 2026-09-15) - and the hand-picked board adds. Judy's row comments are consolidated in the jp_notes column of every sheet",
+        f"*Reception draft is an INVITATION list, not an attendance list. It is the FST",
+        f"sponsors plus the top {RECEPTION_TOP_N} living 5-year donors (was 30), less Dotty",
+        "Ashton, Don Katz and Don & Tracey Boyd, plus Executive Director Fund donors",
+        "(2013-17) not otherwise invited, plus the hand-picked board adds. HH board members",
+        "are deliberately NOT on it: they are working the event, so they attend but are not",
+        "sent an invitation (Don, 2026-09-15). Headcount is therefore this list PLUS the",
+        f"board - about {len(BOARD_MEMBERS)} more households - so do not size the room or the",
+        "catering from the row count alone. Judy's row comments are consolidated in the jp_notes column of every sheet",
         "but printer; her general remarks: "
         + "; ".join(
             f'"{n}"' for n in (
