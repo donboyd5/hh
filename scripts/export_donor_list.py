@@ -140,7 +140,7 @@ DNC_MAIL_ANYWAY = {
 
 # extra notes Don asked to carry on specific rows (keyed by Neon household id)
 HAND_NOTES = {
-    "3809": "moved to Cambridge NY per Judy; SC address kept until new one obtained via Alyson (Don 2026-09-14)",
+    "3809": "moved to Cambridge NY; new address from Alyson via Judy 2026-09-15, also entered in Neon; Alyson confirms mail + invite are welcome",
     "4356": "whether to mail decided after Andrew is back (Don 2026-09-15)",
     "70": "whether to send decided later with Andrew (Don 2026-09-15)",
 }

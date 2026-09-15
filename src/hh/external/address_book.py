@@ -70,6 +70,16 @@ ADDRESS_CORRECTIONS = {
     "Linda & Chuck Putney": {"city": "Bennington"},
     "Dakota Wilbur & Chad Varney": {"city": "Greenwich"},
     "Cynthia Mangsen": {"city": "North Bennington"},
+    # Linda Slack (household 3809) moved from Mt. Pleasant SC to Cambridge NY. Her
+    # daughter Alyson supplied the address and Judy entered it in Neon on 2026-09-15,
+    # so this override only bridges the gap until the next pull - drop it then and
+    # confirm Neon agrees, rather than leaving two copies of the address to diverge.
+    "Linda Slack": {
+        "address": "30 West Main Street, Apartment D1",
+        "city": "Cambridge",
+        "state_province": "NY",
+        "zip_code": "12816",
+    },
 }
 
 # Board-nominated adds whose address is supplied by hand (2026-09-13) - fills or
