@@ -138,7 +138,6 @@ DNC_MAIL_ANYWAY = {
     "4356": "DNC overridden (Don 2026-09-15): Katz on the mailing list per Judy; reception no",
     "3964": "DNC overridden (Don 2026-09-14): Nolan/MacKrell $500 5-yr; Sue proposed adding Mary",
     "1672": "DNC overridden (Don 2026-09-14): Merrill's DNC = anonymous gifts, OK to thank/ask",
-    "40010": "DNC overridden (Don 2026-09-14): Brillon DNC is for the business; home address OK",
     "288": "DNC overridden (Don 2026-09-14): Throop DNC is for Mitch's business; contact Carol",
 }
 
@@ -278,9 +277,27 @@ MFS_2ND_ADDRESS = {
 #   - Thomas Jones (205, $250 5-yr) is Alix's father; Judy asked whether to mail him and
 #     Don 2026-09-15 answered no. Alix Jones & Jason Dolmetsch (318) are a separate
 #     household and stay; Ikuko Jones (47537) is unrelated.
+#   - Sally Brillon (40010) and "Joe & Sally Brillon" (294) are one household in two Neon
+#     records - same street, same email, same phone, only a Chamberlain/Chamberlin
+#     spelling apart (Judy, 2026-09-15: "listed twice"). The HOUSEHOLD record survives:
+#     it is the 2025 appeal giver ($100 this year, $400 over five), and it is not
+#     do-not-contact, so it needs no override. The single is an MfS-list artifact with
+#     $0 giving and a DNC flag. Judy suggested keeping the single; Don chose the
+#     household - worth telling her which way it went. Dropping 40010 also retires its
+#     DNC_MAIL_ANYWAY entry below.
+#   - William Cormier appears twice among the not-in-Neon rows (Judy, 2026-09-15:
+#     "remove 1") - same email and phone, house number 36 both times, but two different
+#     streets: "36 East Broadway" from the assessment roll (addr roll-strong, via the FST
+#     sponsor list) and "36 E. Main St." from the MfS list (addr mfs-list). The address
+#     precedence already ranks roll-strong above mfs-list, so the MfS row goes and the
+#     roll-verified address survives. Note the discarded row named the household "William
+#     & Sara Jane Cormier"; if the label should name them both, that is a name change on
+#     the surviving row, not a reason to keep the weaker address.
+
 MAILING_EXCLUDE = {
     "joan bohrer & stephen schatz", "kenneth strickler", "ken strickler", "lucas sconzo",
-    "christa berthiaume", "rich & dari norman", "thomas jones",
+    "christa berthiaume", "rich & dari norman", "thomas jones", "sally brillon",
+    "william & sara jane cormier",
 }
 
 
@@ -599,13 +616,17 @@ RECEPTION_EXCLUDE = {
 ED_FUND_CAMPAIGN = "Executive Director Fund"
 ED_FUND_FUND = "Director's Salary Fund"
 
-# HH board (Don, 2026-09-15), keyed by Neon household id -> (role, invitee name,
-# salutation). Board members are invited to the reception regardless of giving
-# (Judy's remark, Don: "yes add board members") and are invited ALONE - "we should
-# not invite spouses of board members to the reception - we're going to put board
-# members to work!" - so their reception row carries the member's own name, not the
-# household's. The appeal-list row is untouched. The Boyds stay off the reception
-# via RECEPTION_EXCLUDE (unable to attend).
+# HH board, keyed by Neon household id -> (role, invitee name, salutation).
+# Reception history, so the reversals read in order: board members were added
+# regardless of giving (2026-09-15 morning, Judy's remark), then switched to being
+# invited alone without spouses ("we're going to put board members to work"), and
+# are now OFF the reception list entirely (2026-09-15 afternoon, Don) - if they are
+# working the event they do not need an invitation. Every household here is
+# excluded from the reception, including the six who would otherwise qualify on
+# giving alone (Judy Pate, Alix Jones, Surowka, Andrew Pate, Sue Sanderson, Macura).
+# Their APPEAL-list rows are untouched - they still get the letter, under the
+# household name. Kept as a table rather than folded into RECEPTION_EXCLUDE so the
+# roster and the reason stay legible if the board changes or the ruling flips again.
 BOARD_MEMBERS = {
     "53": ("Chair", "Don Boyd", "Don"),
     "595": ("Past Chair", "Margaret Surowka", "Margaret"),
@@ -681,29 +702,11 @@ def _reception_draft(
             "in_neon": True, "do_not_contact": bool(bk["do_not_contact"]),
             "deceased": bool(bk["deceased"]),
         })
-    # HH board members: invited regardless of giving; those already in via the top-N
-    # just get their role noted
+    # HH board members are OFF the reception list (Don, 2026-09-15 PM) - they are
+    # working the event. Drop any who arrived via the top-N or the ED fund; their
+    # appeal-list rows are untouched.
     invited |= set(ed_ids & living_ids)
-    for hh_id, (role, member, first) in BOARD_MEMBERS.items():
-        if hh_id in RECEPTION_EXCLUDE:
-            continue
-        if hh_id in invited:
-            for r in rows:
-                if r["neon_hh_id"] == hh_id:
-                    r["notes"] = f"{r['notes']}; HH board: {role} - invited alone (household: {r['mailing_name']})"
-                    r["mailing_name"], r["salutation"] = member, first
-            continue
-        bk = b.loc[hh_id]
-        rows.append({
-            "mailing_name": member, "salutation": first,
-            "address": bk["address"],
-            "city": bk["city"], "state": bk["state_province"], "zip": bk["zip_code"],
-            "category": "HH board member", "email": bk["email"],
-            "phone": bk["phone"], "neon_hh_id": hh_id, "steward": steward_map.get(hh_id),
-            "notes": f"HH board: {role} - invited alone (household: {_label_name(bk['name'])})",
-            "in_neon": True, "do_not_contact": bool(bk["do_not_contact"]),
-            "deceased": bool(bk["deceased"]),
-        })
+    rows = [r for r in rows if r["neon_hh_id"] not in BOARD_MEMBERS]
     # the hand-picked board adds join the reception list too (RECEPTION_BOARD_ADDS is
     # deliberate, not automatic - see its comment)
     for key in sorted(RECEPTION_BOARD_ADDS):
