@@ -589,6 +589,22 @@ RECEPTION_EXCLUDE = {
 ED_FUND_CAMPAIGN = "Executive Director Fund"
 ED_FUND_FUND = "Director's Salary Fund"
 
+# HH board (Don, 2026-09-15), keyed by Neon household id -> role. Board members are
+# invited to the reception regardless of giving (Judy's remark, Don: "yes add board
+# members"); the Boyds stay off via RECEPTION_EXCLUDE (unable to attend).
+BOARD_MEMBERS = {
+    "53": "Chair (Don Boyd)",
+    "595": "Past Chair (Margaret Surowka)",
+    "8": "Vice Chair (Sue Sanderson)",
+    "723": "Treasurer (Judy Pate)",
+    "4488": "Secretary (Allie Scoville)",
+    "58": "board member (Terry Dansin)",
+    "318": "board member (Alix Jones)",
+    "270": "board member (Kelvin Keraga)",
+    "1462": "board member (Elyssa Macura)",
+    "3": "Emeritus (Andrew Pate)",
+}
+
 # Reception invites among the board adds - NOT every board add comes to the reception
 # (Don, 2026-09-13: Mary Ann Spiezio yes; Carol Brownell and Elsa Brancaleone no).
 # Keep this hand list deliberate as board adds grow.
@@ -648,6 +664,28 @@ def _reception_draft(
             "category": "ED fund donor 2013-17", "email": bk["email"],
             "phone": bk["phone"], "neon_hh_id": hh_id, "steward": steward_map.get(hh_id),
             "notes": "gave to the Executive Director Fund (David Snider's salary)",
+            "in_neon": True, "do_not_contact": bool(bk["do_not_contact"]),
+            "deceased": bool(bk["deceased"]),
+        })
+    # HH board members: invited regardless of giving; those already in via the top-N
+    # just get their role noted
+    invited |= set(ed_ids & living_ids)
+    for hh_id, role in BOARD_MEMBERS.items():
+        if hh_id in RECEPTION_EXCLUDE:
+            continue
+        if hh_id in invited:
+            for r in rows:
+                if r["neon_hh_id"] == hh_id:
+                    r["notes"] = f"{r['notes']}; HH board: {role}"
+            continue
+        bk = b.loc[hh_id]
+        rows.append({
+            "mailing_name": _label_name(bk["name"]), "salutation": salutation.get(hh_id),
+            "address": bk["address"],
+            "city": bk["city"], "state": bk["state_province"], "zip": bk["zip_code"],
+            "category": "HH board member", "email": bk["email"],
+            "phone": bk["phone"], "neon_hh_id": hh_id, "steward": steward_map.get(hh_id),
+            "notes": f"HH board: {role}",
             "in_neon": True, "do_not_contact": bool(bk["do_not_contact"]),
             "deceased": bool(bk["deceased"]),
         })
@@ -868,8 +906,8 @@ def _md(board: pd.DataFrame) -> str:
         "",
         f"*Reception draft: FST sponsors plus the top {RECEPTION_TOP_N} living 5-year donors",
         "(was 30), less Dotty Ashton, Don Katz and Don & Tracey Boyd, plus Executive",
-        "Director Fund donors (2013-17) not otherwise invited and the hand-picked board",
-        "adds. Judy's row comments are consolidated in the jp_notes column of every sheet",
+        "Director Fund donors (2013-17) not otherwise invited, HH board members regardless",
+        "of giving (Don, 2026-09-15), and the hand-picked board adds. Judy's row comments are consolidated in the jp_notes column of every sheet",
         "but printer; her general remarks: "
         + "; ".join(
             f'"{n}"' for n in (
