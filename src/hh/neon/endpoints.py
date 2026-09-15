@@ -105,6 +105,14 @@ OUTPUT_FIELDS: dict[str, list[str]] = {
         "Event End Date",
         "Event Capacity",
         "Event Registration Attendee Count",
+        # Where the event was held. Mostly the campus ("Hubbard Hall", ~85% of rows) rather
+        # than the room, and room-level tagging largely stopped after 2021 - the 2024 and
+        # 2025 Manhattan Short showings were in the Freight Depot but are tagged "Hubbard
+        # Hall" - so treat a specific room as evidence, never its absence. See clean.events
+        # for the spelling normalization. ("Marked Attended" was considered and rejected:
+        # HH does not use Neon check-in, so it is 0 or blank on all but one event, which
+        # would read as "nobody came" next to the registration count.)
+        "Event Location Name",
     ],
 }
 
