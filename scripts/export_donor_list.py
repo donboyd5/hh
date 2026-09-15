@@ -918,7 +918,8 @@ def _md(board: pd.DataFrame) -> str:
         f"*Reception draft: FST sponsors plus the top {RECEPTION_TOP_N} living 5-year donors",
         "(was 30), less Dotty Ashton, Don Katz and Don & Tracey Boyd, plus Executive",
         "Director Fund donors (2013-17) not otherwise invited, HH board members regardless",
-        "of giving (Don, 2026-09-15), and the hand-picked board adds. Judy's row comments are consolidated in the jp_notes column of every sheet",
+        "of giving - invited alone, without spouses, since they are working the event",
+        "(Don, 2026-09-15) - and the hand-picked board adds. Judy's row comments are consolidated in the jp_notes column of every sheet",
         "but printer; her general remarks: "
         + "; ".join(
             f'"{n}"' for n in (
