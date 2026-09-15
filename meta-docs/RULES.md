@@ -53,9 +53,29 @@ statements conflict, the rule that is more specific to Hubbard Hall wins.
   it is - do not trash it, do not rewrite its contents, do not "update in place".
 - Before touching any Drive file, read it with comments included; if it has comment
   threads, treat it as read-only and tell Don what the comments say.
-- Generated Sheets (the CSV mirrors of the xlsx) are disposable and are replaced
-  create-then-trash, one at a time; the Doc rule above does not apply to them unless a
-  Sheet has comments, in which case the same never-overwrite rule applies.
+- **Do not build Drive Sheets from CSV. Hand the xlsx to Don and let him upload it**
+  (Don, 2026-09-15). The assistant's Drive tool takes content inline only - there is no
+  "upload this path" - so a CSV Sheet means retyping every row through the model. That is
+  wrong on three counts, and the third is the one that matters:
+    1. CSV is one tab, so five sheets become five separate files rather than one workbook.
+    2. CSV carries no formatting, so the house style below is lost every single time.
+    3. **It invents errors.** Transcribing 558 rows by hand duplicated a household
+       (Mitsuo Lockrow appeared twice, 559 rows) - and the uploads are too large to read
+       back and verify, so such an error can ship unnoticed. A mailing list that silently
+       gains or drops a row is worse than no Drive copy at all.
+  The xlsx already has the tabs and the formatting. Regenerate it, save a dated copy
+  (`final-mailing-list-draft_YYYY-MM-DD_HHMM.xlsx`), and tell Don the path; he drags it
+  into the Drive folder and does File > Save as Google Sheets. Uploading the xlsx
+  directly is not an option for the assistant: it would have to pass ~186,000 characters
+  of base64 through the model, and a 9,000-character attempt already failed.
+- Docs are different and stay the assistant's job: HTML -> Google Doc import works
+  cleanly (real `<table>`, no rowspan) and needs no transcription of tabular data.
+  Bold inside table cells survives the import - `read_file_content` renders it back as
+  escaped `\*\*text\*\*`, which looks like a bug but is just its markdown serialization.
+- **Only the current files live in the Drive folder.** Before publishing a new round,
+  move what is there into `Archive/` (Don keeps that subfolder) rather than leaving old
+  and new side by side - mixed vintages are what made the folder confusing (Don,
+  2026-09-15). One workbook plus the overview Doc is the target state.
 - Only one Drive upload in flight at a time (two concurrent uploaders to the same folder
   once produced duplicate sheets under identical titles).
 
@@ -71,7 +91,6 @@ generate for people (donor lists, address book, attendee match, ...) gets it in 
 - **Names readable without widening**: mailing name, salutation and category columns
   wide enough to show most of their text (currently 32 / 22 / 32 characters); address
   and notes wide too.
-- A CSV->Sheets upload carries NONE of this (no cell formatting in CSV). When a Drive
-  Sheet has been hand-formatted, say so before replacing it, and re-apply the formatting
-  (or upload the xlsx itself, which Sheets converts with formatting intact) rather than
-  silently dropping it.
+- A CSV->Sheets upload carries NONE of this (no cell formatting in CSV), which is one of
+  the reasons the Drive rule above says to ship the xlsx and let Don upload it. Google
+  Sheets converts an uploaded xlsx with the tabs and formatting intact.
