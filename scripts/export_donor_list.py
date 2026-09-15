@@ -6,10 +6,13 @@ priority order so each household lands in exactly one; every row carries an addr
 board sheet's notes). Successive cuts change the constants below and re-run.
 
 Outputs (data/20_processed/, never published):
-  final-mailing-list-draft.xlsx  - sheet 1 "board" (full detail), sheet 2 "printer" (labels),
-                                    sheet 3 "do_not_contact" (would-qualify-but-DNC review,
-                                    ids from 1000), sheet 4 "not_in_neon" (so they can be
-                                    added to Neon)
+  final-mailing-list-draft.xlsx  - sheet 1 "board" (full detail), sheet 2 "do_not_contact"
+                                    (would-qualify-but-DNC review, ids from 1000), sheet 3
+                                    "not_in_neon" (so they can be added to Neon), sheet 4
+                                    "reception_draft"
+  final-mailing-list-printer.csv - the label feed: printer columns only, surname-sorted.
+                                    Its own file rather than a tab (Don, 2026-09-15) - a
+                                    mail-merge input, not something anyone reads.
   final-mailing-list-draft.md    - annotated category table, individuals listed per category
 
 Usage:
@@ -952,6 +955,7 @@ def main() -> None:
     suffix = sys.argv[1] if len(sys.argv) > 1 else ""
     xlsx = config.layer_dir("processed") / XLSX_FILENAME.replace(".xlsx", f"{suffix}.xlsx")
     md_path = config.layer_dir("processed") / MD_FILENAME.replace(".md", f"{suffix}.md")
+    printer_csv = config.layer_dir("processed") / f"final-mailing-list-printer{suffix}.csv"
     dnc_review = board.attrs["dnc_review"]
     not_in_neon = board[~board["in_neon"]].reset_index(drop=True)
     reception_draft = board.attrs["reception_draft"]
@@ -967,18 +971,21 @@ def main() -> None:
         .drop(columns=["__st", "__nm"])
     )
     sources = {
-        "printer": board, "board": board_view, "do_not_contact": dnc_review,
+        "board": board_view, "do_not_contact": dnc_review,
         "not_in_neon": not_in_neon, "reception_draft": reception_draft,
     }
+    # The printer gets its own CSV rather than a tab (Don, 2026-09-15): it is a label feed,
+    # not something anyone reads, and its seven columns are all present on the board sheet,
+    # so nothing is lost by moving it out. Written surname-sorted, matching the board ids.
+    board[PRINTER_COLUMNS].to_csv(printer_csv, index=False)
     with pd.ExcelWriter(xlsx, engine="openpyxl") as xw:
-        board[PRINTER_COLUMNS].to_excel(xw, sheet_name="printer", index=False)
         board_view[BOARD_COLUMNS].to_excel(xw, sheet_name="board", index=False)
         dnc_review[BOARD_COLUMNS].to_excel(xw, sheet_name="do_not_contact", index=False)
         not_in_neon[BOARD_COLUMNS].to_excel(xw, sheet_name="not_in_neon", index=False)
         reception_draft[BOARD_COLUMNS].to_excel(xw, sheet_name="reception_draft", index=False)
         for name, sheet in xw.sheets.items():
             sheet.freeze_panes = FREEZE_PANES
-            columns = PRINTER_COLUMNS if name == "printer" else BOARD_COLUMNS
+            columns = BOARD_COLUMNS
             for i, col in enumerate(columns, start=1):
                 letter = get_column_letter(i)
                 sheet.column_dimensions[letter].width = COLUMN_WIDTHS.get(col, 12)
@@ -1000,8 +1007,9 @@ def main() -> None:
               + (f"; UNMATCHED keys: {ov['unmatched']}" if ov["unmatched"] else ""))
     print(board["category"].value_counts().to_string())
     print(f"\n{len(board)} households -> {xlsx.name}, {md_path.name}")
+    print(f"printer label feed ({len(board)} rows) -> {printer_csv.name}")
     print(
-        f"printer sheet leftmost, then board, then do_not_contact ({len(dnc_review)}), "
+        f"workbook: board, then do_not_contact ({len(dnc_review)}), "
         f"then not_in_neon ({len(not_in_neon)}, so they can be added to Neon), "
         f"then reception_draft ({len(reception_draft)} = FST sponsors + top "
         f"{RECEPTION_TOP_N} 5yr donors); sorted by surname; ids 1..{len(board)}"
