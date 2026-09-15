@@ -10,9 +10,10 @@ Outputs (data/20_processed/, never published):
                                     (would-qualify-but-DNC review, ids from 1000), sheet 3
                                     "not_in_neon" (so they can be added to Neon), sheet 4
                                     "reception_draft"
-  final-mailing-list-printer.csv - the label feed: printer columns only, surname-sorted.
-                                    Its own file rather than a tab (Don, 2026-09-15) - a
-                                    mail-merge input, not something anyone reads.
+  final-mailing-list-printer.csv - the label feed: printer columns only, sorted zip then
+                                    surname (the bulk-mail presort order). Its own file
+                                    rather than a tab (Don, 2026-09-15) - a mail-merge
+                                    input, not something anyone reads.
   final-mailing-list-draft.md    - annotated category table, individuals listed per category
 
 Usage:
@@ -976,8 +977,16 @@ def main() -> None:
     }
     # The printer gets its own CSV rather than a tab (Don, 2026-09-15): it is a label feed,
     # not something anyone reads, and its seven columns are all present on the board sheet,
-    # so nothing is lost by moving it out. Written surname-sorted, matching the board ids.
-    board[PRINTER_COLUMNS].to_csv(printer_csv, index=False)
+    # so nothing is lost by moving it out. Sorted zip then surname (Don, 2026-09-15) - the
+    # presort order bulk mail is dropped in, not the surname order every other sheet uses.
+    # The id column keeps its board-sheet number rather than renumbering, so a row can still
+    # be traced back; it is therefore NOT sequential in this file, which is expected.
+    printer_view = (
+        board.assign(__z=board["zip"].astype(str), __nm=board["mailing_name"].map(_sort_key))
+        .sort_values(["__z", "__nm"], kind="stable")
+        .drop(columns=["__z", "__nm"])
+    )
+    printer_view[PRINTER_COLUMNS].to_csv(printer_csv, index=False)
     with pd.ExcelWriter(xlsx, engine="openpyxl") as xw:
         board_view[BOARD_COLUMNS].to_excel(xw, sheet_name="board", index=False)
         dnc_review[BOARD_COLUMNS].to_excel(xw, sheet_name="do_not_contact", index=False)
@@ -1007,7 +1016,7 @@ def main() -> None:
               + (f"; UNMATCHED keys: {ov['unmatched']}" if ov["unmatched"] else ""))
     print(board["category"].value_counts().to_string())
     print(f"\n{len(board)} households -> {xlsx.name}, {md_path.name}")
-    print(f"printer label feed ({len(board)} rows) -> {printer_csv.name}")
+    print(f"printer label feed ({len(board)} rows, zip then surname) -> {printer_csv.name}")
     print(
         f"workbook: board, then do_not_contact ({len(dnc_review)}), "
         f"then not_in_neon ({len(not_in_neon)}, so they can be added to Neon), "
