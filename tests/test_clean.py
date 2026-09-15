@@ -135,3 +135,40 @@ def test_clean_registrations_joins_category_and_household():
     assert list(out["event_majorcat"]) == ["performance", "class"]
     assert list(out["id"]) == ["H1", "A2"]
     assert list(out["group"]) == ["household", "account"]
+
+
+def test_normalize_venue_collapses_spellings_and_blanks():
+    from hh.clean.events import normalize_venue
+
+    # the same room under three Neon spellings
+    assert normalize_venue("Freight Depot") == "Freight Depot"
+    assert normalize_venue("Freight Depot Theater") == "Freight Depot"
+    assert normalize_venue("Freight Depot Theater/Gallery") == "Freight Depot"
+    assert normalize_venue("  Hubbard Hall  Mainstage ") == "Hubbard Hall Main Stage"
+    # zero-width characters Neon carries in some names
+    assert normalize_venue("​​Canteen Coffee Co.") == "Canteen Coffee Co."
+    # placeholders and non-strings are missing, not venues
+    for blank in ("", "   ", "N/A", None, 3):
+        assert pd.isna(normalize_venue(blank))
+    # two rooms named together are not silently claimed for either
+    both = "Beacon Feed Dance Studio & Freight Depot"
+    assert normalize_venue(both) == both
+    # an unrecognized venue passes through rather than being dropped
+    assert normalize_venue("Owl Pen Books") == "Owl Pen Books"
+
+
+def test_clean_events_carries_location_and_venue():
+    from hh.clean.events import clean_events
+
+    raw = pd.DataFrame(
+        {
+            "Event ID": ["1", "2"],
+            "Event Name": ["Manhattan Short", "Opera"],
+            "Event Start Date": ["2024-09-29", "2016-08-20"],
+            "Event Location Name": ["Hubbard Hall", "Freight Depot Theater/Gallery"],
+            "Event Registration Attendee Count": ["82", "51"],
+        }
+    )
+    out = clean_events(raw)
+    assert out["location"].tolist() == ["Hubbard Hall", "Freight Depot Theater/Gallery"]
+    assert out["venue"].tolist() == ["Hubbard Hall", "Freight Depot"]

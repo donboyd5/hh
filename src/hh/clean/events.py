@@ -7,6 +7,8 @@ Neon, so running this on live data is the real test of whether the rules still a
 """
 from __future__ import annotations
 
+import re
+
 import pandas as pd
 
 from ..categorize import add_indicators, add_major_minor
@@ -24,7 +26,45 @@ EVENT_FIELDS = {
     "Event End Date": "ends_on",
     "Event Capacity": "capacity",
     "Event Registration Attendee Count": "attendees",
+    "Event Location Name": "location",
 }
+
+# Venue spellings that are the same room, collapsed into ``venue``. ``location`` keeps what
+# Neon holds. Only unambiguous variants are merged - "Beacon Feed Visual Arts Studio" is a
+# different room from the dance studio, and "Beacon Feed Dance Studio & Freight Depot" names
+# two rooms, so both are left alone.
+VENUE_ALIASES = {
+    "freight depot": "Freight Depot",
+    "freight depot theater": "Freight Depot",
+    "freight depot theater/gallery": "Freight Depot",
+    "hubbard hall mainstage": "Hubbard Hall Main Stage",
+    "hubbard hall main stage": "Hubbard Hall Main Stage",
+    "beacon feed dance studio": "Beacon Feed Dance Studio",
+    "beacon feeds dance studio": "Beacon Feed Dance Studio",
+    "hubbard hall beacon feeds dance studio": "Beacon Feed Dance Studio",
+    "online via zoom": "Online via Zoom",
+    "argyle brewing co": "Argyle Brewing Company",
+    "argyle brewing company": "Argyle Brewing Company",
+    "salem art works": "Salem Art Works",
+    "salem art works (saw)": "Salem Art Works",
+    "the georgi": "The Georgi",
+    "the georgi on the battenkill": "The Georgi",
+    "lovejoy loft": "Lovejoy Loft",
+    "lovejoy loft building": "Lovejoy Loft",
+}
+
+# Neon's location text carries zero-width characters and stray runs of whitespace.
+_BLANKS = re.compile(r"[\u200b\u200c\u200d\ufeff]")
+
+
+def normalize_venue(value) -> object:
+    """Canonical room name for ``value``; unrecognized names pass through, tidied."""
+    if not isinstance(value, str):
+        return pd.NA
+    cleaned = re.sub(r"\s+", " ", _BLANKS.sub("", value)).strip()
+    if not cleaned or cleaned.upper() == "N/A":
+        return pd.NA
+    return VENUE_ALIASES.get(cleaned.lower(), cleaned)
 
 
 def clean_events(raw: pd.DataFrame | None = None, *, pull_dir=None) -> pd.DataFrame:
@@ -40,6 +80,9 @@ def clean_events(raw: pd.DataFrame | None = None, *, pull_dir=None) -> pd.DataFr
     for col in ("attendees", "capacity"):
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce")
+    # Neon's location is usually the campus, not the room, and room-level tagging largely
+    # stopped after 2021 - a specific room is evidence, its absence is not.
+    df["venue"] = df["location"].map(normalize_venue) if "location" in df.columns else pd.NA
     df = add_major_minor(df)
     df = add_indicators(df)
     return df
