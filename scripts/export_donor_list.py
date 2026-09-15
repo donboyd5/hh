@@ -131,6 +131,7 @@ JP_NOTES_GENERAL = config.layer_dir("external") / "jp-notes-general.csv"
 # the reason in notes. The book's do_not_contact flag still shows True on their rows.
 DNC_MAIL_ANYWAY = {
     "70": "DNC overridden (Don 2026-09-14): Neubohns are major consistent donors; ask Andrew",
+    "4356": "DNC overridden (Don 2026-09-15): Katz on the mailing list per Judy; reception no",
     "3964": "DNC overridden (Don 2026-09-14): Nolan/MacKrell $500 5-yr; Sue proposed adding Mary",
     "1672": "DNC overridden (Don 2026-09-14): Merrill's DNC = anonymous gifts, OK to thank/ask",
     "40010": "DNC overridden (Don 2026-09-14): Brillon DNC is for the business; home address OK",
@@ -140,6 +141,8 @@ DNC_MAIL_ANYWAY = {
 # extra notes Don asked to carry on specific rows (keyed by Neon household id)
 HAND_NOTES = {
     "3809": "moved to Cambridge NY per Judy; SC address kept until new one obtained via Alyson (Don 2026-09-14)",
+    "4356": "whether to mail decided after Andrew is back (Don 2026-09-15)",
+    "70": "whether to send decided later with Andrew (Don 2026-09-15)",
 }
 
 # "Ann & Bob Smith" -> ("smith", "ann"): labels sort by surname, then first listed name
@@ -268,9 +271,12 @@ MFS_2ND_ADDRESS = {
 #     same evening). Larry Sconzo (132) is a separate household and stays.
 #   - Christa Berthiaume (69) moved to VA and Rich & Dari Norman (FST, not in Neon)
 #     moved to NJ, per Judy; Don 2026-09-14: off the list (Norman also off reception).
+#   - Thomas Jones (205, $250 5-yr) is Alix's father; Judy asked whether to mail him and
+#     Don 2026-09-15 answered no. Alix Jones & Jason Dolmetsch (318) are a separate
+#     household and stay; Ikuko Jones (47537) is unrelated.
 MAILING_EXCLUDE = {
     "joan bohrer & stephen schatz", "kenneth strickler", "ken strickler", "lucas sconzo",
-    "christa berthiaume", "rich & dari norman",
+    "christa berthiaume", "rich & dari norman", "thomas jones",
 }
 
 
@@ -578,7 +584,7 @@ RECEPTION_TOP_N = 50  # Don, 2026-09-14 (was 30): FST sponsors + the 50 largest 
 # these come off - so the cutoff is the one Don quoted ($1,100 at rank 50).
 RECEPTION_EXCLUDE = {
     "2457": "Dotty Ashton - DNC; keep off appeal and drop from reception",
-    "4356": "Don Katz - DNC, minimal local connection; drop from reception, ask Andrew",
+    "4356": "Don Katz - minimal local connection; off reception per Judy (mailing list yes)",
     "53": "Don & Tracey Boyd - unable to attend",
     "7": "George Scurria - removed from the list 9/10",
 }
