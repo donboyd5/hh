@@ -589,20 +589,24 @@ RECEPTION_EXCLUDE = {
 ED_FUND_CAMPAIGN = "Executive Director Fund"
 ED_FUND_FUND = "Director's Salary Fund"
 
-# HH board (Don, 2026-09-15), keyed by Neon household id -> role. Board members are
-# invited to the reception regardless of giving (Judy's remark, Don: "yes add board
-# members"); the Boyds stay off via RECEPTION_EXCLUDE (unable to attend).
+# HH board (Don, 2026-09-15), keyed by Neon household id -> (role, invitee name,
+# salutation). Board members are invited to the reception regardless of giving
+# (Judy's remark, Don: "yes add board members") and are invited ALONE - "we should
+# not invite spouses of board members to the reception - we're going to put board
+# members to work!" - so their reception row carries the member's own name, not the
+# household's. The appeal-list row is untouched. The Boyds stay off the reception
+# via RECEPTION_EXCLUDE (unable to attend).
 BOARD_MEMBERS = {
-    "53": "Chair (Don Boyd)",
-    "595": "Past Chair (Margaret Surowka)",
-    "8": "Vice Chair (Sue Sanderson)",
-    "723": "Treasurer (Judy Pate)",
-    "4488": "Secretary (Allie Scoville)",
-    "58": "board member (Terry Dansin)",
-    "318": "board member (Alix Jones)",
-    "270": "board member (Kelvin Keraga)",
-    "1462": "board member (Elyssa Macura)",
-    "3": "Emeritus (Andrew Pate)",
+    "53": ("Chair", "Don Boyd", "Don"),
+    "595": ("Past Chair", "Margaret Surowka", "Margaret"),
+    "8": ("Vice Chair", "Sue Sanderson", "Sue"),
+    "723": ("Treasurer", "Judy Pate", "Judy"),
+    "4488": ("Secretary", "Allie Scoville", "Allie"),
+    "58": ("board member", "Terry Dansin", "Terry"),
+    "318": ("board member", "Alix Jones", "Alix"),
+    "270": ("board member", "Kelvin Keraga", "Kelvin"),
+    "1462": ("board member", "Elyssa Macura", "Elyssa"),
+    "3": ("Emeritus", "Andrew Pate", "Andrew"),
 }
 
 # Reception invites among the board adds - NOT every board add comes to the reception
@@ -670,22 +674,23 @@ def _reception_draft(
     # HH board members: invited regardless of giving; those already in via the top-N
     # just get their role noted
     invited |= set(ed_ids & living_ids)
-    for hh_id, role in BOARD_MEMBERS.items():
+    for hh_id, (role, member, first) in BOARD_MEMBERS.items():
         if hh_id in RECEPTION_EXCLUDE:
             continue
         if hh_id in invited:
             for r in rows:
                 if r["neon_hh_id"] == hh_id:
-                    r["notes"] = f"{r['notes']}; HH board: {role}"
+                    r["notes"] = f"{r['notes']}; HH board: {role} - invited alone (household: {r['mailing_name']})"
+                    r["mailing_name"], r["salutation"] = member, first
             continue
         bk = b.loc[hh_id]
         rows.append({
-            "mailing_name": _label_name(bk["name"]), "salutation": salutation.get(hh_id),
+            "mailing_name": member, "salutation": first,
             "address": bk["address"],
             "city": bk["city"], "state": bk["state_province"], "zip": bk["zip_code"],
             "category": "HH board member", "email": bk["email"],
             "phone": bk["phone"], "neon_hh_id": hh_id, "steward": steward_map.get(hh_id),
-            "notes": f"HH board: {role}",
+            "notes": f"HH board: {role} - invited alone (household: {_label_name(bk['name'])})",
             "in_neon": True, "do_not_contact": bool(bk["do_not_contact"]),
             "deceased": bool(bk["deceased"]),
         })
