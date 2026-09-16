@@ -14,6 +14,9 @@ Outputs (data/20_processed/, never published):
                                     surname (the bulk-mail presort order). Its own file
                                     rather than a tab (Don, 2026-09-15) - a mail-merge
                                     input, not something anyone reads.
+  ..._YYYY-MM-DD_HHMM.{xlsx,csv}  - dated copies of both, written every run. These are the
+                                    ones to hand Don for the Drive upload; the undated pair
+                                    above is the working copy the other scripts read.
   final-mailing-list-draft.md    - annotated category table, individuals listed per category
 
 Usage:
@@ -22,6 +25,7 @@ Usage:
 from __future__ import annotations
 
 import re
+import shutil
 import sys
 
 import pandas as pd
@@ -965,6 +969,13 @@ def main() -> None:
     xlsx = config.layer_dir("processed") / XLSX_FILENAME.replace(".xlsx", f"{suffix}.xlsx")
     md_path = config.layer_dir("processed") / MD_FILENAME.replace(".md", f"{suffix}.md")
     printer_csv = config.layer_dir("processed") / f"final-mailing-list-printer{suffix}.csv"
+    # Dated copies, written every run (Don, 2026-09-15). He uploads the xlsx to Drive
+    # himself (see meta-docs/RULES.md), and a stable dated name is what makes the Drive
+    # folder sortable and unambiguous. Emitted by the script rather than copied by hand
+    # so they cannot drift from the undated working pair or be forgotten in a hurry.
+    stamp = pd.Timestamp.now().strftime("%Y-%m-%d_%H%M")
+    dated_xlsx = xlsx.with_name(f"{xlsx.stem}_{stamp}{xlsx.suffix}")
+    dated_csv = printer_csv.with_name(f"{printer_csv.stem}_{stamp}{printer_csv.suffix}")
     dnc_review = board.attrs["dnc_review"]
     not_in_neon = board[~board["in_neon"]].reset_index(drop=True)
     reception_draft = board.attrs["reception_draft"]
@@ -1018,6 +1029,8 @@ def main() -> None:
             for cell in sheet[1]:
                 cell.font = Font(bold=True)
     md_path.write_text(_md(board))
+    shutil.copyfile(xlsx, dated_xlsx)
+    shutil.copyfile(printer_csv, dated_csv)
     ov = board.attrs.get("steward_overrides")
     if ov:
         print(f"steward overrides: {ov['applied']} applied"
@@ -1025,6 +1038,7 @@ def main() -> None:
     print(board["category"].value_counts().to_string())
     print(f"\n{len(board)} households -> {xlsx.name}, {md_path.name}")
     print(f"printer label feed ({len(board)} rows, zip then surname) -> {printer_csv.name}")
+    print(f"dated copies for the Drive upload -> {dated_xlsx.name}, {dated_csv.name}")
     print(
         f"workbook: board, then do_not_contact ({len(dnc_review)}), "
         f"then not_in_neon ({len(not_in_neon)}, so they can be added to Neon), "
