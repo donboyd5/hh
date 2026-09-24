@@ -425,5 +425,16 @@
       "Appendices",
       "<span class='chapter-number'>B</span>  <span class='chapter-title'>Questions to answer next</span>"
     ]
+  },
+  {
+    "objectID": "98-todo.html#fall-2026-mailing-list-deliverables",
+    "href": "98-todo.html#fall-2026-mailing-list-deliverables",
+    "title": "Appendix B — Questions to answer next",
+    "section": "B.4 Fall 2026 mailing list — deliverables",
+    "text": "B.4 Fall 2026 mailing list — deliverables\n\nSeparate printer CSV (Don, 2026-09-15). The printer needs its own file rather than a tab inside the workbook: the printer columns only (id, mailing_name, salutation, address, city, state, zip) in the printer sort (surname, then first listed name). Plain CSV, not xlsx - it is a label feed, not something anyone reads. Watch the zip: it must stay 5-digit text with leading zeros, so decide deliberately whether the consumer wants the =\"05773\" formula wrapper (needed only if it will be opened in Sheets/Excel) or a bare quoted 05773 (right for a mail-merge that reads the file directly). Ask the printer which before generating.",
+    "crumbs": [
+      "Appendices",
+      "<span class='chapter-number'>B</span>  <span class='chapter-title'>Questions to answer next</span>"
+    ]
   }
 ]
