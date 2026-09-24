@@ -45,14 +45,3 @@ chapters or sections, with notes on feasibility given the data we already pull f
   "do members behave differently?" questions.
 - [ ] **Campaign/appeal codes** on donations — would let "when do donations arrive?" separate
   appeal-driven from spontaneous gifts.
-
-## Fall 2026 mailing list — deliverables
-
-- [ ] **Separate printer CSV** (Don, 2026-09-15). The printer needs its own file rather than a
-  tab inside the workbook: the printer columns only (id, mailing_name, salutation, address,
-  city, state, zip) in the printer sort (surname, then first listed name). Plain CSV, not
-  xlsx - it is a label feed, not something anyone reads. Watch the zip: it must stay
-  5-digit text with leading zeros, so decide deliberately whether the consumer wants the
-  `="05773"` formula wrapper (needed only if it will be opened in Sheets/Excel) or a bare
-  quoted `05773` (right for a mail-merge that reads the file directly). Ask the printer
-  which before generating.
