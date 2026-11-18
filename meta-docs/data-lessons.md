@@ -104,6 +104,25 @@ is the index, not the implementation. Started 2026-08-31; dates mark when a less
   73 minus 6 that clear the $500 engaged-non-donor bar (2026-08-31;
   `meta-docs/mailing-list-floor-alternatives.md`).
 - **The donor export (FY24–26) carries no Neon ids** — matched by normalized name + city.
+- **The campaign tracker (fall 2026) is one running total per household**, not a gift log —
+  "Donations Oct 1st, 2026 to Jan 31, 2027" has no dates, so "gave in October vs November"
+  cannot come from it (2026-11-17; `external/campaign_tracker.py`).
+- **Board members' gifts are lumped** into one "Board Donations" row, so a board member's
+  own row is blank whether or not they gave. Blank ≠ not yet; the prospect list drops the
+  board rather than calling them prospects (`analytics/prospects.py`, `analytics/board.py`).
+- **Some amounts are typed as formulas** (`=100+1000`). Read with
+  `load_workbook(data_only=True)`; formula mode returns the text and silently turns a
+  $1,100 donor into "not yet". The loader's total (list rows + board lump) ties to her
+  `=SUM` cell to the cent on the 2026-11-17 copy.
+- **Her cell comments start with `======`** (openpyxl's thread separator). Written back to
+  xlsx unstripped, the cell is read as a formula and shows blank — strip the separators
+  (`clean_comment`). Comments also flag pledges not yet received ("DAF due 11-18-26"), and
+  her amounts include them.
+- **Company gift accounts appear under the contact person's household** in her sheet, not
+  under the company's own Neon account, so company status comes from a hand-checked
+  crosswalk — kept in gitignored `data/30_external/prospect-crosswalk.yaml` because it names
+  donors (`load_crosswalk` in `analytics/prospects.py`). The export prints any company gift
+  missing from it.
 
 ## External people-lists (data/00_raw/external)
 

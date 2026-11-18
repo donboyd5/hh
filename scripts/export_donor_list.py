@@ -33,6 +33,7 @@ from openpyxl.styles import Font, PatternFill
 from openpyxl.utils import get_column_letter
 
 from hh import config, io
+from hh.analytics.board import BOARD_MEMBERS
 from hh.analytics.donors import INTERNAL_ACCOUNT_IDS
 from hh.analytics.mailing import DON_FY_COLUMNS, GIVING_FYS, gifts_by_fy
 from hh.clean.accounts import clean_accounts
@@ -633,18 +634,7 @@ ED_FUND_FUND = "Director's Salary Fund"
 # Their APPEAL-list rows are untouched - they still get the letter, under the
 # household name. Kept as a table rather than folded into RECEPTION_EXCLUDE so the
 # roster and the reason stay legible if the board changes or the ruling flips again.
-BOARD_MEMBERS = {
-    "53": ("Chair", "Don Boyd", "Don"),
-    "595": ("Past Chair", "Margaret Surowka", "Margaret"),
-    "8": ("Vice Chair", "Sue Sanderson", "Sue"),
-    "723": ("Treasurer", "Judy Pate", "Judy"),
-    "4488": ("Secretary", "Allie Scoville", "Allie"),
-    "58": ("board member", "Terry Dansin", "Terry"),
-    "318": ("board member", "Alix Jones", "Alix"),
-    "270": ("board member", "Kelvin Keraga", "Kelvin"),
-    "1462": ("board member", "Elyssa Macura", "Elyssa"),
-    "3": ("Emeritus", "Andrew Pate", "Andrew"),
-}
+# The roster itself lives in hh.analytics.board (shared with export_prospects.py).
 
 # Reception invites among the board adds - NOT every board add comes to the reception
 # (Don, 2026-09-13: Mary Ann Spiezio yes; Carol Brownell and Elsa Brancaleone no).
